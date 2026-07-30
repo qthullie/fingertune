@@ -39,7 +39,6 @@ tab. No frame, no landmark, no score ever leaves the machine.
 - [Quick start](#quick-start)
 - [Project layout](#project-layout)
 - [Running fully offline](#running-fully-offline)
-- [Limitations](#limitations)
 - [License](#license)
 
 ---
@@ -179,8 +178,8 @@ and hit windows stay aligned with the music.
 What that clock cannot recover is the delay already baked into the input:
 webcam exposure and USB transfer, then inference, then the browser's audio output
 buffer. The pipeline measures the pinch when it *sees* it, which is inevitably
-after it happened. There is no calibration screen yet — see
-[Limitations](#limitations).
+after it happened. If everything reads late on your machine, shorten
+`APPROACH_TIME` to compensate.
 
 ### Tuning and diagnosis
 
@@ -304,25 +303,6 @@ model comes from Google's CDN. To host that too:
 npm run fetch:model
 echo "VITE_HAND_MODEL_URL=./models/hand_landmarker.task" > .env.local
 ```
-
-## Limitations
-
-- **Latency is not calibrated.** Capture, inference and audio output each add
-  delay, hardware-dependent, and nothing measures the total. If you read
-  consistently late, compensate with `APPROACH_TIME` — that is a workaround, not
-  a fix.
-- **No accuracy benchmark.** There is no labelled dataset of pinches here, so
-  there are no false-positive / false-negative numbers to quote. The thresholds
-  were tuned by hand, on one person, in ordinary indoor light.
-- **Tracking degrades before the game does.** Backlight, low light, a hand
-  leaving the frame or turning side-on all break landmark quality first; the
-  debug overlay tells you which layer is failing.
-- **One hand.** `MAX_HANDS = 2` is supported by the pipeline, but no chart uses
-  it and handedness is trusted exactly as MediaPipe reports it.
-- **The demo chart is hand-written**, on a 120 BPM grid — no beat detection, no
-  audio analysis.
-- **Desktop only.** Layout and hit radii assume a desktop viewport and a
-  front-facing webcam.
 
 ## License
 

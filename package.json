@@ -2,7 +2,26 @@
   "name": "fingertune",
   "version": "0.1.0",
   "private": false,
-  "description": "An Osu!-style rhythm game played by pinching your fingers (MediaPipe Hand Landmarker + React + TypeScript)",
+  "description": "An Osu!-style rhythm game played by pinching your fingers, tracked from a webcam with MediaPipe Hand Landmarker. Runs entirely in the browser.",
+  "keywords": [
+    "hand-tracking",
+    "mediapipe",
+    "gesture-recognition",
+    "computer-vision",
+    "rhythm-game",
+    "one-euro-filter",
+    "webcam",
+    "react",
+    "typescript"
+  ],
+  "homepage": "https://github.com/qthullie/fingertune#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/qthullie/fingertune.git"
+  },
+  "bugs": {
+    "url": "https://github.com/qthullie/fingertune/issues"
+  },
   "license": "MIT",
   "type": "module",
   "engines": {
