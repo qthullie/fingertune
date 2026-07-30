@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Boucle requestAnimationFrame stable : le callback peut changer a chaque rendu
- * React sans relancer ni desynchroniser la boucle.
+ * Stable requestAnimationFrame loop: the callback can change on every React
+ * render without restarting or desynchronising the loop.
  *
- * @param callback recoit (dtSeconds, nowMs). dt est borne pour eviter les sauts
- *                 apres un changement d'onglet.
- * @param active   met la boucle en pause quand false.
+ * @param callback receives (dtSeconds, nowMs). dt is clamped to avoid a jump
+ *                 after the tab has been in the background.
+ * @param active   pauses the loop when false.
  */
 export function useAnimationFrame(
   callback: (dt: number, nowMs: number) => void,

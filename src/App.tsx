@@ -13,11 +13,11 @@ import { defaultBeatmap } from './beatmaps';
 import { assets, settings } from './config/settings';
 
 /**
- * Instances uniques, hors du cycle React.
+ * Single instances, kept outside React's lifecycle.
  *
- * Elles possedent des ressources lourdes (webcam, contexte audio, modele wasm) :
- * on ne veut ni les recreer a chaque rendu, ni les liberer sur le double montage
- * de <StrictMode> en dev. Elles vivent le temps de l'onglet.
+ * They own heavy resources (webcam, audio context, wasm model): we neither want
+ * to recreate them on every render nor release them on <StrictMode>'s double
+ * mount in dev. They live as long as the tab does.
  */
 const engine = new GameEngine();
 const tracker = new HandTracker();
@@ -27,7 +27,7 @@ type UiPhase = 'start' | 'playing' | 'end' | 'error';
 
 export function App(): JSX.Element {
   const [uiPhase, setUiPhase] = useState<UiPhase>('start');
-  const [status, setStatus] = useState('Modele de hand tracking non charge (~7 Mo au 1er lancement).');
+  const [status, setStatus] = useState('Hand-tracking model not loaded yet (~7 MB on first run).');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
   const [best, setBest] = useState<BestScore | null>(() => loadBest(defaultBeatmap.id));
@@ -36,18 +36,17 @@ export function App(): JSX.Element {
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
 
-  /** Lance une partie (suppose modele + camera + audio prets). */
+  /** Starts a run (assumes model, camera and audio are ready). */
   const startRun = useCallback(() => {
     if (!configuredRef.current) {
       engine.configure({
-        // Le timing du jeu suit l'horloge audio, pas rAF.
+        // Game timing follows the audio clock, not rAF.
         clock: () => audio.now(),
         onHitSound: (grade, combo) => audio.playHit(grade, combo),
         onMissSound: (brokeCombo) => audio.playMiss(brokeCombo),
-        // La musique monte d'un cran a chaque phase.
+        // The soundtrack steps up on every phase.
         onPhaseChange: (index) => audio.setIntensity(index),
         onFinish: () => {
-          // Fin de beatmap : on soumet le score au tableau local.
           const final = engine.getSnapshot();
           const result = submitScore(defaultBeatmap.id, {
             score: final.score,
@@ -64,25 +63,25 @@ export function App(): JSX.Element {
     setRecord(null);
     tracker.resetHands();
     audio.setBpm(defaultBeatmap.bpm);
-    // La musique donne le t=0 : les cibles tombent sur la grille du morceau.
+    // The music defines t=0, so notes land on the musical grid.
     const startAt = audio.startMusic();
     engine.start(defaultBeatmap, startAt);
     setUiPhase('playing');
   }, []);
 
-  /** Chargement paresseux (doit rester dans le geste utilisateur pour l'audio). */
+  /** Lazy loading (must stay inside the user gesture for audio to start). */
   const handleStart = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       await audio.init();
-      // Bip immediat : si tu ne l'entends pas, le probleme est la sortie audio
-      // (onglet coupe, volume systeme), pas le jeu.
+      // Immediate blip: if you cannot hear it, the problem is the audio output
+      // (muted tab, system volume), not the game.
       audio.playTestBlip();
       await audio.loadTrack(assets.musicUrl);
       await tracker.loadModel(setStatus);
       await tracker.startCamera(setStatus);
-      setStatus('Pret.');
+      setStatus('Ready.');
       startRun();
     } catch (err) {
       console.error(err);
@@ -98,7 +97,7 @@ export function App(): JSX.Element {
     setUiPhase('start');
   }, []);
 
-  /* Raccourcis clavier : R rejouer, M metronome, D debug. */
+  /* Keyboard shortcuts. */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       const key = e.key.toLowerCase();
@@ -107,19 +106,22 @@ export function App(): JSX.Element {
       if (key === 'd') settings.DEBUG = !settings.DEBUG;
       if (key === 's') settings.SHOW_SKELETON = !settings.SHOW_SKELETON;
       if (key === 'p') settings.SHOW_PINCH_METER = !settings.SHOW_PINCH_METER;
+      if (key === 'f') settings.SHOW_PLAYFIELD = !settings.SHOW_PLAYFIELD;
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [startRun]);
 
-  /* Coupe la musique quand la partie se termine. */
+  /* Stop the music when the run ends. */
   useEffect(() => {
     if (uiPhase === 'end') audio.stopMusic();
   }, [uiPhase]);
 
-  /* Bac a sable console : window.fingertune.settings.PINCH_ON_RATIO = 0.35 */
+  /* Console sandbox: window.fingertune.settings.PINCH_ON_RATIO = 0.35 */
   useEffect(() => {
-    Object.assign(window, { fingertune: { settings, engine, tracker, audio, beatmap: defaultBeatmap } });
+    Object.assign(window, {
+      fingertune: { settings, engine, tracker, audio, beatmap: defaultBeatmap },
+    });
   }, []);
 
   return (
@@ -139,9 +141,7 @@ export function App(): JSX.Element {
       {uiPhase === 'error' && error && (
         <ErrorScreen message={error.message} detail={error.detail} onRetry={handleRetry} />
       )}
-      {uiPhase === 'end' && (
-        <EndScreen snapshot={snapshot} record={record} onReplay={startRun} />
-      )}
+      {uiPhase === 'end' && <EndScreen snapshot={snapshot} record={record} onReplay={startRun} />}
     </div>
   );
 }

@@ -2,7 +2,7 @@
   "name": "fingertune",
   "version": "0.1.0",
   "private": false,
-  "description": "Jeu de rythme facon Osu! joue au pincement des doigts (MediaPipe Hand Landmarker + React + TypeScript)",
+  "description": "An Osu!-style rhythm game played by pinching your fingers (MediaPipe Hand Landmarker + React + TypeScript)",
   "license": "MIT",
   "type": "module",
   "engines": {

@@ -1,29 +1,28 @@
 /**
- * Meilleurs scores, un par beatmap, persistes dans localStorage.
+ * Best scores, one per beatmap, persisted in localStorage.
  *
- * Volontairement local : pas de compte, pas de serveur, rien qui sorte de la
- * machine — comme le reste du jeu. Toutes les lectures/ecritures sont protegees :
- * en navigation privee, localStorage peut lever, et un score perdu ne doit jamais
- * casser une partie.
+ * Deliberately local: no account, no server, nothing leaving the machine — like
+ * the rest of the game. Every read and write is guarded: localStorage can throw
+ * in private mode, and a lost score must never break a run.
  */
 
 const STORAGE_KEY = 'fingertune.highscores.v1';
 
 export interface BestScore {
   score: number;
-  /** Precision ponderee, en pourcents. */
+  /** Weighted accuracy, as a percentage. */
   accuracy: number;
   maxCombo: number;
-  /** Date ISO du record. */
+  /** ISO date of the record. */
   date: string;
 }
 
 export interface RecordResult {
-  /** Le score qui vient d'etre joue bat-il l'ancien record ? */
+  /** Did the run that just ended beat the previous record? */
   isRecord: boolean;
-  /** Record precedent, ou null si c'etait la premiere partie. */
+  /** Previous record, or null if this was the first run. */
   previous: BestScore | null;
-  /** Meilleur score apres cette partie. */
+  /** Best score after this run. */
   best: BestScore;
 }
 
@@ -45,11 +44,11 @@ function writeStore(store: Store): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
   } catch {
-    // Quota plein ou stockage refuse : on joue sans sauvegarder.
+    // Quota full or storage denied: play on without saving.
   }
 }
 
-/** Meilleur score connu pour une beatmap, ou null. */
+/** Best known score for a beatmap, or null. */
 export function loadBest(beatmapId: string): BestScore | null {
   const entry = readStore()[beatmapId];
   if (!entry || typeof entry.score !== 'number') return null;
@@ -57,13 +56,10 @@ export function loadBest(beatmapId: string): BestScore | null {
 }
 
 /**
- * Enregistre une partie si elle bat le record. Le score prime ; a score egal,
- * la meilleure precision l'emporte.
+ * Saves a run if it beats the record. Score wins; on a tie, the better accuracy
+ * wins.
  */
-export function submitScore(
-  beatmapId: string,
-  run: Omit<BestScore, 'date'>,
-): RecordResult {
+export function submitScore(beatmapId: string, run: Omit<BestScore, 'date'>): RecordResult {
   const store = readStore();
   const previous = store[beatmapId] ?? null;
   const isRecord =
@@ -79,7 +75,7 @@ export function submitScore(
   return { isRecord: true, previous, best };
 }
 
-/** Efface le record d'une beatmap (utile depuis la console). */
+/** Clears a beatmap's record (handy from the console). */
 export function clearBest(beatmapId: string): void {
   const store = readStore();
   delete store[beatmapId];

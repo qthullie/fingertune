@@ -3,16 +3,16 @@ import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 /**
- * Deux modes de build :
- *   - defaut       : site statique classique dans dist/ (GitHub Pages, Netlify…)
- *   - "standalone" : un seul fichier HTML auto-porteur dans dist-standalone/,
- *                    avec le wasm MediaPipe pris sur CDN (voir .env.standalone).
- *                    `npm run build:standalone` le recopie dans standalone/.
+ * Two build modes:
+ *   - default      : a plain static site in dist/ (GitHub Pages, Netlify…)
+ *   - "standalone" : one self-contained HTML file in dist-standalone/, with the
+ *                    MediaPipe wasm pulled from a CDN (see .env.standalone).
+ *                    `npm run build:standalone` copies it into standalone/.
  */
 export default defineConfig(({ mode }) => ({
   plugins: [react(), ...(mode === 'standalone' ? [viteSingleFile()] : [])],
-  // Base relative : le build fonctionne tel quel sur GitHub Pages (site de projet
-  // servi depuis /<repo>/), sur Netlify/Vercel, ou en simple dossier statique.
+  // Relative base: the build works as-is on GitHub Pages (project sites are
+  // served from /<repo>/), on Netlify/Vercel, or as a plain static folder.
   base: './',
   server: {
     host: true,
@@ -23,8 +23,8 @@ export default defineConfig(({ mode }) => ({
     sourcemap: mode !== 'standalone',
     outDir: mode === 'standalone' ? 'dist-standalone' : 'dist',
   },
-  // Les binaires wasm de MediaPipe sont copies dans public/mediapipe/wasm par
-  // scripts/copy-mediapipe-assets.mjs (hook predev / prebuild).
+  // The MediaPipe wasm binaries are copied into public/mediapipe/wasm by
+  // scripts/copy-assets.mjs (predev / prebuild hooks).
   optimizeDeps: {
     exclude: ['@mediapipe/tasks-vision'],
   },

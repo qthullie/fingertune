@@ -1,24 +1,41 @@
 /**
- * Transformation "cover" de la video dans le canvas.
+ * Two coordinate spaces, and the reason there are two.
  *
- * Landmarks ET cibles vivent dans le meme repere normalise 0..1 attache a l'image
- * video affichee : ce qui garantit qu'une cible dessinee a (x, y) est atteignable
- * par la main a (x, y), quel que soit l'aspect ratio de la fenetre.
+ * - `View` is the video rectangle as drawn on the canvas, in CSS-`cover` fit.
+ *   Landmarks live here: MediaPipe reports them relative to the camera frame.
+ *   In `cover`, that rectangle is usually LARGER than the canvas, so part of it
+ *   is off-screen.
+ *
+ * - `Playfield` is the visible intersection of that rectangle and the canvas,
+ *   minus a small margin. Targets live here. Placing a target at x = 0.1 in
+ *   video space would put it off-screen on a window whose aspect ratio differs
+ *   from the webcam's — unreachable and unhittable.
+ *
+ * A cursor is converted to pixels through the View, a target through the
+ * Playfield, and hit tests happen in pixels. Both spaces then agree on screen.
  */
 
+import { settings } from '../config/settings';
 import type { Vec2 } from '../game/types';
 
-export interface View {
-  /** Offset en pixels CSS du coin haut-gauche de l'image affichee. */
-  dx: number;
-  dy: number;
-  /** Taille en pixels CSS de l'image affichee (peut deborder du canvas). */
-  dw: number;
-  dh: number;
-  /** min(dw, dh) : reference pour les rayons, garde les cercles circulaires. */
+export interface Rect {
+  /** Top-left corner, in CSS pixels. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** min(width, height): reference for radii, keeps circles circular. */
   minSide: number;
 }
 
+export type View = Rect;
+export type Playfield = Rect;
+
+function rect(x: number, y: number, width: number, height: number): Rect {
+  return { x, y, width, height, minSide: Math.min(width, height) };
+}
+
+/** Where the webcam image is drawn, in `cover` fit (it may overflow the canvas). */
 export function computeCoverView(
   canvasWidth: number,
   canvasHeight: number,
@@ -26,37 +43,47 @@ export function computeCoverView(
   videoHeight: number,
 ): View {
   if (videoWidth <= 0 || videoHeight <= 0) {
-    return {
-      dx: 0,
-      dy: 0,
-      dw: canvasWidth,
-      dh: canvasHeight,
-      minSide: Math.min(canvasWidth, canvasHeight),
-    };
+    return rect(0, 0, canvasWidth, canvasHeight);
   }
   const scale = Math.max(canvasWidth / videoWidth, canvasHeight / videoHeight);
-  const dw = videoWidth * scale;
-  const dh = videoHeight * scale;
-  return {
-    dx: (canvasWidth - dw) / 2,
-    dy: (canvasHeight - dh) / 2,
-    dw,
-    dh,
-    minSide: Math.min(dw, dh),
-  };
+  const width = videoWidth * scale;
+  const height = videoHeight * scale;
+  return rect((canvasWidth - width) / 2, (canvasHeight - height) / 2, width, height);
 }
 
-/** Normalise (0..1 zone video) -> pixels CSS du canvas. */
-export function toScreen(view: View, p: Vec2): Vec2 {
-  return { x: view.dx + p.x * view.dw, y: view.dy + p.y * view.dh };
+/**
+ * The area targets may occupy: what is both inside the video rectangle and
+ * inside the canvas, shrunk by PLAYFIELD_PADDING.
+ */
+export function computePlayfield(view: View, canvasWidth: number, canvasHeight: number): Playfield {
+  const left = Math.max(view.x, 0);
+  const top = Math.max(view.y, 0);
+  const right = Math.min(view.x + view.width, canvasWidth);
+  const bottom = Math.min(view.y + view.height, canvasHeight);
+
+  const width = Math.max(right - left, 1);
+  const height = Math.max(bottom - top, 1);
+  const padding = settings.PLAYFIELD_PADDING;
+
+  return rect(
+    left + width * padding,
+    top + height * padding,
+    width * (1 - 2 * padding),
+    height * (1 - 2 * padding),
+  );
 }
 
-/** Rayon normalise -> pixels. */
-export function radiusPx(view: View, rNorm: number): number {
-  return rNorm * view.minSide;
+/** Normalised point inside a rect -> CSS pixels. */
+export function toScreen(area: Rect, p: Vec2): Vec2 {
+  return { x: area.x + p.x * area.width, y: area.y + p.y * area.height };
 }
 
-/** Distance ecran (px) entre deux points normalises : evite l'ovalisation. */
-export function screenDistance(view: View, a: Vec2, b: Vec2): number {
-  return Math.hypot((a.x - b.x) * view.dw, (a.y - b.y) * view.dh);
+/** Normalised radius -> pixels. */
+export function radiusPx(area: Rect, rNorm: number): number {
+  return rNorm * area.minSide;
+}
+
+/** Pixel distance between two points already expressed in pixels. */
+export function pixelDistance(a: Vec2, b: Vec2): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
 }

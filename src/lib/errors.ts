@@ -1,4 +1,4 @@
-/** Traduction des erreurs techniques en messages clairs pour le joueur. */
+/** Turns technical failures into messages a player can act on. */
 
 import { TrackingError } from './handTracking';
 
@@ -14,17 +14,17 @@ export function explainError(err: unknown): FriendlyError {
     if (err.code === 'NO_MEDIA_DEVICES') {
       return {
         message:
-          "Ce navigateur n'expose pas la webcam. Sers la page en https:// ou depuis " +
-          'localhost (un fichier ouvert en file:// est bloque par la plupart des navigateurs).',
+          'This browser does not expose the webcam. Serve the page over https:// or from ' +
+          'localhost — a file opened over file:// is blocked by most browsers.',
         detail,
       };
     }
     if (err.code === 'MODEL_LOAD_FAILED') {
       return {
         message:
-          'Impossible de charger le modele de hand tracking. Verifie ta connexion, ' +
-          "puis relance (le modele fait ~7 Mo au premier lancement). Si tu es hors ligne, " +
-          'lance `npm run fetch:model` pour l\'heberger toi-meme.',
+          'Could not load the hand-tracking model. Check your connection and try again ' +
+          '(the model is ~7 MB on first launch). If you are offline, run `npm run fetch:model` ' +
+          'to host it yourself.',
         detail,
       };
     }
@@ -36,21 +36,21 @@ export function explainError(err: unknown): FriendlyError {
     case 'SecurityError':
       return {
         message:
-          "Acces a la webcam refuse. Autorise la camera depuis l'icone dans la barre " +
-          "d'adresse, puis reessaie.",
+          'Webcam access was denied. Allow the camera from the icon in the address bar, ' +
+          'then try again.',
         detail,
       };
     case 'NotFoundError':
     case 'OverconstrainedError':
-      return { message: 'Aucune webcam detectee. Branche une camera puis reessaie.', detail };
+      return { message: 'No webcam found. Plug a camera in and try again.', detail };
     case 'NotReadableError':
       return {
         message:
-          'La webcam est deja utilisee par une autre application (Zoom, Teams, OBS…). ' +
-          'Ferme-la puis reessaie.',
+          'The webcam is already in use by another application (Zoom, Teams, OBS…). ' +
+          'Close it and try again.',
         detail,
       };
     default:
-      return { message: 'Echec du demarrage.', detail };
+      return { message: 'Startup failed.', detail };
   }
 }

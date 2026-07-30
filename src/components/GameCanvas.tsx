@@ -3,34 +3,34 @@ import { useAnimationFrame } from '../hooks/useAnimationFrame';
 import type { GameEngine } from '../game/engine';
 import type { HandTracker } from '../lib/handTracking';
 import { renderFrame } from '../render/renderer';
-import { computeCoverView, type View } from '../render/view';
+import { computeCoverView, computePlayfield, toScreen } from '../render/view';
 
 interface Props {
   engine: GameEngine;
   tracker: HandTracker;
-  /** false met la boucle en pause (ecran de demarrage, erreur…). */
+  /** false pauses the loop (start screen, error screen…). */
   active: boolean;
 }
 
 /**
- * Le canvas et la boucle de jeu.
+ * The canvas and the game loop.
  *
- * Ordre d'une frame :
- *   1. horloge + tracking          (HandTracker.detect)
- *   2. entrees                     (front montant de pincement -> GameEngine.tryHit)
- *   3. logique                     (GameEngine.update : miss, effets, fin)
- *   4. rendu                       (renderFrame)
+ * Order within a frame:
+ *   1. clock       (GameEngine.advanceClock, audio clock)
+ *   2. tracking    (HandTracker.detect)
+ *   3. input       (pinch rising edge -> GameEngine.tryHit)
+ *   4. logic       (GameEngine.update: misses, effects, end of run)
+ *   5. render      (renderFrame)
  *
- * Le timing du jeu vient de l'horloge audio (voir GameEngine.configure), pas de
- * requestAnimationFrame : un frame drop ne decale donc pas le rythme.
+ * Game timing comes from the audio clock (see GameEngine.configure), not from
+ * requestAnimationFrame, so a dropped frame never shifts the beat.
  */
 export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const viewRef = useRef<View>({ dx: 0, dy: 0, dw: 1, dh: 1, minSide: 1 });
   const fpsRef = useRef(60);
 
-  // Taille du canvas = taille CSS x devicePixelRatio (plafonne a 2 : au dela, le
-  // cout de remplissage explose sans gain visible).
+  // Canvas size = CSS size x devicePixelRatio (capped at 2: beyond that the fill
+  // cost explodes for no visible gain).
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -66,36 +66,38 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
     const height = window.innerHeight;
     const video = tracker.video;
     const view = computeCoverView(width, height, video?.videoWidth ?? 0, video?.videoHeight ?? 0);
-    viewRef.current = view;
+    const playfield = computePlayfield(view, width, height);
 
-    // 1. Horloge AVANT tout le reste : le hit doit etre juge avec l'instant
-    //    ou le pincement est observe, pas avec celui de la frame precedente.
+    // 1. Clock first: a hit must be judged with the instant the pinch is seen,
+    //    not with the previous frame's.
     engine.advanceClock();
 
-    // 2. Tracking. L'horloge de lissage suit le temps de jeu quand on joue.
+    // 2. Tracking. The smoothing clock follows game time while playing.
     const tSec = engine.phase === 'playing' ? engine.time : nowMs / 1000;
     tracker.detect(tSec, nowMs);
     engine.setHandCount(tracker.visibleHandCount);
 
-    // 3. Entrees : un hit par transition relache -> actif.
+    // 3. Input: one hit per released -> active transition. The cursor lives in
+    //    video space, targets in playfield space, so both are compared in pixels.
     for (const hand of tracker.hands) {
-      if (hand.visible && hand.justPinched && hand.pinchPos) {
-        const hit = engine.tryHit(hand.pinchPos, view);
-        // Pincement dans le vide : marqueur discret, pour distinguer "pas
-        // detecte" de "detecte mais a cote / hors tempo".
-        if (!hit) engine.notePinchMiss(hand.pinchPos);
-      }
+      if (!hand.visible || !hand.justPinched || !hand.pinchPos) continue;
+      const cursorPx = toScreen(view, hand.pinchPos);
+      const hit = engine.tryHit(cursorPx, playfield);
+      // Pinch into thin air: leave a marker, so "not detected" is
+      // distinguishable from "detected but off-target or off-beat".
+      if (!hit) engine.notePinchMiss(cursorPx, playfield);
     }
 
-    // 4. Logique.
+    // 4. Logic.
     engine.update(dt);
 
-    // 4. Rendu.
+    // 5. Render.
     renderFrame({
       ctx,
       width,
       height,
       view,
+      playfield,
       video,
       engine,
       hands: tracker.hands,

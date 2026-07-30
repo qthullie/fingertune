@@ -1,41 +1,39 @@
-/** Types partages du jeu. */
+/** Shared game types. */
 
 export type Grade = 'PERFECT' | 'GOOD' | 'MISS';
 
 export type GamePhase = 'idle' | 'playing' | 'finished';
 
-/** Une note de beatmap. x, y sont normalises 0..1 dans la zone video affichee. */
+/** A beatmap note. x and y are normalised 0..1 inside the playfield. */
 export interface BeatmapNote {
-  /** 0 = bord gauche de l'image affichee (deja en miroir), 1 = bord droit. */
+  /** 0 = left edge of the playfield (already mirrored), 1 = right edge. */
   x: number;
-  /** 0 = haut, 1 = bas. */
+  /** 0 = top, 1 = bottom. */
   y: number;
-  /** Instant du hit, en secondes depuis le debut du morceau. */
+  /** Hit instant, in seconds from the start of the track. */
   t: number;
 }
 
 /**
- * Une phase de difficulte. Une beatmap en enchaine plusieurs : la premiere est
- * tres lente (le temps de lire la cible et de caler son pincement), les
- * suivantes resserrent le cercle d'approche.
+ * A difficulty phase. A beatmap chains several: the first one is very slow and
+ * very forgiving, later ones tighten the ring, the windows and the targets.
  */
 export interface BeatmapPhase {
   id: string;
-  /** Affiche en banniere au debut de la phase. */
+  /** Shown as a banner when the phase starts. */
   name: string;
-  /** Sous-titre court (ce que la phase demande au joueur). */
+  /** Short subtitle: what the phase asks of the player. */
   hint: string;
-  /** Debut de la phase, en secondes de beatmap (avant le decompte). */
+  /** Phase start, in beatmap seconds (before the countdown offset). */
   start: number;
-  /** Duree du cercle d'approche pour les notes de cette phase, en secondes. */
+  /** Approach-ring duration for this phase's notes, in seconds. */
   approachTime: number;
   /**
-   * Multiplicateur des fenetres de timing (Perfect / Good). 2 = deux fois plus
-   * indulgent. C'est ce qui fait la difference facile / moyen / difficile,
-   * autant que la vitesse.
+   * Multiplier on the timing windows (Perfect / Good). 2 = twice as forgiving.
+   * This makes as much of the difficulty as the speed does.
    */
   hitWindowScale: number;
-  /** Multiplicateur du rayon des cibles (et donc de la tolerance spatiale). */
+  /** Multiplier on target radius (and therefore on spatial tolerance). */
   targetScale: number;
 }
 
@@ -44,34 +42,34 @@ export interface Beatmap {
   title: string;
   author: string;
   bpm: number;
-  /** Triees par `start` croissant. La premiere doit demarrer a 0. */
+  /** Sorted by ascending `start`. The first one must start at 0. */
   phases: BeatmapPhase[];
   notes: BeatmapNote[];
 }
 
-/** Note instanciee pendant une partie. */
+/** A note instantiated for a run. */
 export interface Target extends BeatmapNote {
   id: number;
   hit: boolean;
   dead: boolean;
   grade: Grade | null;
-  /** Duree du cercle d'approche, heritee de la phase de la note. */
+  /** Approach-ring duration, inherited from the note's phase. */
   approach: number;
-  /** Fenetres de timing effectives (secondes), heritees de la phase. */
+  /** Effective timing windows (seconds), inherited from the phase. */
   perfectWindow: number;
   goodWindow: number;
-  /** Rayon effectif (fraction du plus petit cote), herite de la phase. */
+  /** Effective radius (fraction of the playfield's smaller side). */
   radius: number;
   phaseIndex: number;
 }
 
-/** Point 2D normalise dans la zone video. */
+/** A normalised 2D point. */
 export interface Vec2 {
   x: number;
   y: number;
 }
 
-/** Etat lisible par React (immuable, remplace a chaque changement). */
+/** State React reads (immutable, replaced whenever something changes). */
 export interface GameSnapshot {
   phase: GamePhase;
   score: number;
@@ -80,22 +78,22 @@ export interface GameSnapshot {
   accuracy: number;
   counts: Record<Grade, number>;
   lastGrade: Grade | null;
-  /** Identifiant croissant du dernier jugement : sert de `key` pour rejouer une animation. */
+  /** Increasing id of the last judgement: used as a `key` to replay an animation. */
   lastEventId: number;
-  /** Ecart signe du dernier hit en ms (negatif = trop tot). */
+  /** Signed timing error of the last hit, in ms (negative = early). */
   lastOffsetMs: number;
-  /** Temps de jeu, arrondi (rafraichi ~20 fois/s pour ne pas re-rendre a 60 fps). */
+  /** Game time, rounded (refreshed ~20x/s so the HUD does not rerender at 60 fps). */
   time: number;
   duration: number;
-  /** Au moins une main suivie actuellement. */
+  /** At least one hand is being tracked. */
   handVisible: boolean;
-  /** Nombre de mains suivies (0, 1 ou 2). */
+  /** Number of hands currently tracked. */
   handCount: number;
-  /** Phase courante de la beatmap. */
+  /** Current beatmap phase. */
   phaseIndex: number;
   phaseCount: number;
   phaseName: string;
   phaseHint: string;
-  /** Incremente a chaque changement de phase : sert de `key` pour la banniere. */
+  /** Increments on every phase change: used as a `key` for the banner. */
   phaseEventId: number;
 }

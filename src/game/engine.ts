@@ -1,19 +1,19 @@
 /**
- * Moteur de jeu : cibles, fenetres de timing, jugement, score/combo.
+ * Game engine: targets, timing windows, judgement, score and combo.
  *
- * Le moteur est un objet mutable (perf : il tourne a 60 fps) qui publie un
- * `GameSnapshot` immuable pour React via un store minimal compatible
- * `useSyncExternalStore`. Le snapshot n'est republie que quand quelque chose change,
- * et le temps y est arrondi a 50 ms pour ne pas re-rendre le HUD 60 fois par seconde.
+ * The engine is a mutable object (it runs at 60 fps) that publishes an immutable
+ * `GameSnapshot` to React through a minimal store compatible with
+ * `useSyncExternalStore`. The snapshot is only republished when something
+ * changes, and its time is quantised to 50 ms so the HUD does not rerender 60
+ * times a second.
  */
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import { EffectSystem } from './effects';
 import type { Beatmap, BeatmapPhase, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
-import { screenDistance } from '../render/view';
-import type { View } from '../render/view';
+import { pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
 
-/** Granularite de republication du temps dans le snapshot (secondes). */
+/** How coarsely time is republished in the snapshot (seconds). */
 const TIME_QUANTUM = 0.05;
 
 type Listener = () => void;
@@ -22,7 +22,7 @@ export class GameEngine {
   readonly effects = new EffectSystem();
   targets: Target[] = [];
   phase: GamePhase = 'idle';
-  /** Temps de jeu courant, en secondes (haute precision, pour le rendu). */
+  /** Current game time, in seconds (full precision, for rendering). */
   time = 0;
   duration = 0;
 
@@ -39,7 +39,7 @@ export class GameEngine {
   private handCount = 0;
   private phaseIndex = 0;
   private phaseEventId = 0;
-  /** Phases decalees du decompte, pretes a comparer a `time`. */
+  /** Phases shifted by the countdown, ready to compare against `time`. */
   private phases: BeatmapPhase[] = [];
 
   private t0 = 0;
@@ -53,7 +53,7 @@ export class GameEngine {
   private snapshotCache: GameSnapshot = this.buildSnapshot();
   private snapshotDirty = false;
 
-  /* ---------------------------------------------------------------- store React */
+  /* ------------------------------------------------------------- React store */
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
@@ -89,12 +89,12 @@ export class GameEngine {
   private publish(): void {
     this.snapshotCache = this.buildSnapshot();
     this.snapshotDirty = false;
-    for (const l of this.listeners) l();
+    for (const listener of this.listeners) listener();
   }
 
-  /* ------------------------------------------------------------------- cablage */
+  /* ------------------------------------------------------------------ wiring */
 
-  /** Branche l'horloge audio et les callbacks son / phase / fin de partie. */
+  /** Wires the audio clock and the sound / phase / finish callbacks. */
   configure(options: {
     clock: () => number;
     onHitSound: (grade: Exclude<Grade, 'MISS'>, combo: number) => void;
@@ -109,7 +109,7 @@ export class GameEngine {
     this.onFinish = options.onFinish;
   }
 
-  /** Nombre de mains suivies, remonte par la boucle de rendu. */
+  /** Number of tracked hands, reported by the render loop. */
   setHandCount(count: number): void {
     if (count !== this.handCount) {
       this.handCount = count;
@@ -118,25 +118,24 @@ export class GameEngine {
     }
   }
 
-  /* --------------------------------------------------------------------- cycle */
+  /* ------------------------------------------------------------------- cycle */
 
   /**
-   * Charge une beatmap et demarre une partie.
+   * Loads a beatmap and starts a run.
    *
-   * @param startAt instant (horloge audio) du t=0 de la partie. Permet de caler
-   *                le depart de la musique et celui des cibles sur le meme
-   *                echantillon audio. Par defaut : maintenant.
+   * @param startAt audio-clock instant to use as the run's t=0. Lets the music
+   *                and the targets start on the very same audio sample.
+   *                Defaults to now.
    */
   start(beatmap: Beatmap, startAt?: number): void {
     this.beatmap = beatmap;
 
-    // Les phases sont decalees du decompte, comme les notes.
+    // Phases are shifted by the countdown, exactly like the notes.
     this.phases = beatmap.phases
-      .map((p) => ({ ...p, start: p.start + settings.COUNTDOWN }))
+      .map((phase) => ({ ...phase, start: phase.start + settings.COUNTDOWN }))
       .sort((a, b) => a.start - b.start);
 
     this.targets = beatmap.notes.map((note, i) => {
-      // Toute la map est decalee apres le decompte.
       const t = note.t + settings.COUNTDOWN;
       const phaseIndex = this.phaseIndexAt(t);
       const phase = this.phases[phaseIndex];
@@ -149,7 +148,7 @@ export class GameEngine {
         hit: false,
         dead: false,
         grade: null,
-        // Vitesse, indulgence et taille : les trois leviers de difficulte.
+        // Speed, forgiveness and size: the three difficulty levers.
         approach: phase?.approachTime ?? settings.APPROACH_TIME,
         perfectWindow: settings.WINDOW_PERFECT * windowScale,
         goodWindow: settings.WINDOW_GOOD * windowScale,
@@ -157,6 +156,7 @@ export class GameEngine {
         phaseIndex,
       };
     });
+
     this.duration = (this.targets.at(-1)?.t ?? 0) + 2;
     this.effects.clear();
     this.score = 0;
@@ -175,7 +175,7 @@ export class GameEngine {
     this.onPhaseChange?.(0, this.phases[0]);
   }
 
-  /** Index de la phase active a l'instant `t` (temps de jeu, decompte inclus). */
+  /** Index of the phase active at game time `t` (countdown included). */
   private phaseIndexAt(t: number): number {
     let index = 0;
     for (let i = 0; i < this.phases.length; i++) {
@@ -193,7 +193,7 @@ export class GameEngine {
     return this.counts.PERFECT + this.counts.GOOD + this.counts.MISS;
   }
 
-  /** Precision ponderee, en pourcents. */
+  /** Weighted accuracy, as a percentage. */
   get accuracy(): number {
     const judged = this.counts.PERFECT + this.counts.GOOD + this.counts.MISS;
     if (judged === 0) return 100;
@@ -202,7 +202,7 @@ export class GameEngine {
     return (got / judged) * 100;
   }
 
-  /** Age du dernier jugement en secondes (pour les animations canvas). */
+  /** Seconds since the last judgement (for canvas animations). */
   get sinceLastGrade(): number {
     return this.time - this.lastGradeAt;
   }
@@ -215,26 +215,26 @@ export class GameEngine {
     return this.phaseIndex;
   }
 
-  /** Cibles actuellement affichees / jugeables (fenetre d'approche propre a la phase). */
+  /** Targets currently displayed / judgeable (approach window is per phase). */
   activeTargets(): Target[] {
     const now = this.time;
     return this.targets.filter(
-      (o) => !o.dead && now >= o.t - o.approach && now <= o.t + o.goodWindow,
+      (target) => !target.dead && now >= target.t - target.approach && now <= target.t + target.goodWindow,
     );
   }
 
   /**
-   * Lit l'horloge audio. A appeler EN DEBUT de frame, avant la detection et les
-   * entrees : sinon un hit est juge avec le temps de la frame precedente, soit
-   * ~16 ms d'erreur sur une fenetre Perfect qui n'en fait que 60.
+   * Reads the audio clock. Call this FIRST in the frame, before detection and
+   * input: otherwise a hit is judged with the previous frame's time, i.e. ~16 ms
+   * of error against a Perfect window that is only 60 ms wide.
    */
   advanceClock(): void {
     if (this.phase === 'playing') this.time = this.clock() - this.t0;
   }
 
   /**
-   * Transforme en Miss les cibles depassees, fait vieillir les effets, publie.
-   * @param dt secondes de rendu ecoulees (pour les particules uniquement).
+   * Turns overdue targets into misses, ages the effects, publishes the snapshot.
+   * @param dt render seconds elapsed (particles only).
    */
   update(dt: number): void {
     if (this.phase !== 'playing') {
@@ -243,7 +243,7 @@ export class GameEngine {
       return;
     }
 
-    // Changement de phase : banniere + montee d'intensite musicale.
+    // Phase change: banner plus a step up in musical intensity.
     const phaseIndex = this.phaseIndexAt(this.time);
     if (phaseIndex !== this.phaseIndex) {
       this.phaseIndex = phaseIndex;
@@ -261,27 +261,31 @@ export class GameEngine {
 
     if (this.time > this.duration) this.finish();
 
-    // Republie si un jugement a eu lieu, ou si le temps a change de cran.
-    const quantized = Math.round(this.time / TIME_QUANTUM) * TIME_QUANTUM;
-    if (this.snapshotDirty || Math.abs(quantized - this.snapshotCache.time) > 1e-9) {
+    // Republish on a judgement, or when the quantised time ticks over.
+    const quantised = Math.round(this.time / TIME_QUANTUM) * TIME_QUANTUM;
+    if (this.snapshotDirty || Math.abs(quantised - this.snapshotCache.time) > 1e-9) {
       this.publish();
     }
   }
 
   /**
-   * Tente un hit a la position du pincement.
-   * @returns true si une cible a ete consommee.
+   * Attempts a hit.
+   *
+   * @param cursorPx pinch position in CSS pixels (converted through the View,
+   *                 since landmarks live in video space and targets do not).
+   * @param playfield where targets are laid out.
+   * @returns true if a target was consumed.
    */
-  tryHit(pos: Vec2, view: View): boolean {
+  tryHit(cursorPx: Vec2, playfield: Playfield): boolean {
     if (this.phase !== 'playing') return false;
 
     let best: Target | null = null;
     let bestDelta = Number.POSITIVE_INFINITY;
 
     for (const target of this.activeTargets()) {
-      // Le rayon de hit suit la phase : les cibles faciles sont plus grosses.
-      const hitRadius = target.radius * settings.HIT_RADIUS_SCALE * view.minSide;
-      if (screenDistance(view, pos, target) > hitRadius) continue;
+      // Hit radius follows the phase: easy targets are bigger.
+      const hitRadius = radiusPx(playfield, target.radius) * settings.HIT_RADIUS_SCALE;
+      if (pixelDistance(cursorPx, toScreen(playfield, target)) > hitRadius) continue;
       const delta = Math.abs(this.time - target.t);
       if (delta < bestDelta) {
         bestDelta = delta;
@@ -292,7 +296,8 @@ export class GameEngine {
 
     const grade: Grade | null =
       bestDelta <= best.perfectWindow ? 'PERFECT' : bestDelta <= best.goodWindow ? 'GOOD' : null;
-    // Hors fenetre : pincement ignore, aucune penalite (comme un clic dans le vide).
+    // Outside the windows: the pinch is ignored, with no penalty (like clicking
+    // on empty space).
     if (!grade) return false;
 
     this.judge(best, grade);
@@ -300,11 +305,14 @@ export class GameEngine {
   }
 
   /**
-   * Pincement detecte mais qui n'a rien touche. Aucune penalite : juste un
-   * marqueur visuel, pour voir d'un coup d'oeil si le geste a ete reconnu.
+   * A pinch was recognised but hit nothing. No penalty: just a marker, so you
+   * can tell at a glance whether the gesture was recognised at all.
    */
-  notePinchMiss(pos: Vec2): void {
-    this.effects.pinchGhost(pos);
+  notePinchMiss(cursorPx: Vec2, playfield: Playfield): void {
+    this.effects.pinchGhost({
+      x: (cursorPx.x - playfield.x) / playfield.width,
+      y: (cursorPx.y - playfield.y) / playfield.height,
+    });
   }
 
   private judge(target: Target, grade: Grade): void {
@@ -319,7 +327,7 @@ export class GameEngine {
     this.eventId += 1;
 
     if (grade === 'MISS') {
-      // Comme sur Osu! : un rate s'entend. Le son est plus fort si un combo tombe.
+      // Like Osu!: a miss is audible, and louder when it breaks a streak.
       const brokeCombo = this.combo > 0;
       this.combo = 0;
       this.effects.miss(target, GRADE_STYLE.MISS.color);

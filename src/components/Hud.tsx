@@ -6,16 +6,21 @@ interface Props {
 }
 
 /**
- * HUD en DOM par dessus le canvas : score, precision, combo, dernier grade,
- * decompte et barre de progression.
+ * DOM HUD on top of the canvas: score, accuracy, combo, last grade, countdown
+ * and progress bar.
  *
- * Le snapshot n'est republie qu'a ~20 Hz (voir GameEngine), donc ce composant ne
- * re-rend pas 60 fois par seconde.
+ * The snapshot is only republished at ~20 Hz (see GameEngine), so this component
+ * does not rerender 60 times a second.
  */
 export function Hud({ snapshot }: Props): JSX.Element | null {
   if (snapshot.phase !== 'playing') return null;
 
-  const countdownLeft = Math.ceil(settings.COUNTDOWN - snapshot.time);
+  // Game time starts slightly negative (t=0 is scheduled a few ms ahead so the
+  // audio can be queued), so clamp before turning it into a countdown number.
+  const countdownLeft = Math.min(
+    Math.ceil(Math.max(settings.COUNTDOWN - snapshot.time, 0)),
+    Math.ceil(settings.COUNTDOWN),
+  );
   const progress = snapshot.duration > 0 ? Math.min(snapshot.time / snapshot.duration, 1) : 0;
   const grade = snapshot.lastGrade ? GRADE_STYLE[snapshot.lastGrade] : null;
   const offset = snapshot.lastOffsetMs;
@@ -37,22 +42,26 @@ export function Hud({ snapshot }: Props): JSX.Element | null {
       )}
 
       {grade && (
-        <div className="hud-grade" key={`grade-${snapshot.lastEventId}`} style={{ color: grade.color }}>
+        <div
+          className="hud-grade"
+          key={`grade-${snapshot.lastEventId}`}
+          style={{ color: grade.color }}
+        >
           <span className="hud-grade-label">{grade.label}</span>
           {snapshot.lastGrade !== 'MISS' && (
             <span className="hud-grade-offset">
               {offset >= 0 ? '+' : ''}
-              {offset.toFixed(0)} ms {offset < 0 ? '(tot)' : '(tard)'}
+              {offset.toFixed(0)} ms {offset < 0 ? '(early)' : '(late)'}
             </span>
           )}
         </div>
       )}
 
       {!snapshot.handVisible && (
-        <div className="hud-warning">Main non detectee — montre ta main a la camera</div>
+        <div className="hud-warning">No hand detected — show your hand to the camera</div>
       )}
 
-      {/* Banniere de phase : rejouee a chaque changement grace a la key. */}
+      {/* Phase banner: replayed on every change thanks to the key. */}
       {snapshot.phaseName && (
         <div className="hud-phase-banner" key={`phase-${snapshot.phaseEventId}`}>
           <div className="hud-phase-name">{snapshot.phaseName}</div>
@@ -64,16 +73,12 @@ export function Hud({ snapshot }: Props): JSX.Element | null {
         <span>
           Phase {snapshot.phaseIndex + 1}/{snapshot.phaseCount}
         </span>
-        <span className={snapshot.handCount >= 2 ? 'hud-hands--duo' : undefined}>
-          {snapshot.handCount} main{snapshot.handCount > 1 ? 's' : ''} suivie
-          {snapshot.handCount > 1 ? 's' : ''}
-        </span>
       </div>
 
       {countdownLeft > 0 && (
         <div className="hud-countdown" key={`cd-${countdownLeft}`}>
           <div className="hud-countdown-number">{countdownLeft}</div>
-          <div className="hud-countdown-hint">Prepare ta main…</div>
+          <div className="hud-countdown-hint">Get your hand ready…</div>
         </div>
       )}
 

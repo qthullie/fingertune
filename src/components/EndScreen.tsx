@@ -5,7 +5,7 @@ import type { RecordResult } from '../lib/highscores';
 
 interface Props {
   snapshot: GameSnapshot;
-  /** Resultat de la soumission du score (record battu ou non). */
+  /** Result of submitting the score (record beaten or not). */
   record: RecordResult | null;
   onReplay: () => void;
 }
@@ -17,13 +17,13 @@ export function EndScreen({ snapshot, record, onReplay }: Props): JSX.Element {
   return (
     <div className="overlay">
       <img className="logo logo--small" src={logoUrl} alt="" width={72} height={72} />
-      <h1 className="title">{isRecord ? 'Nouveau record !' : 'Fini !'}</h1>
+      <h1 className="title">{isRecord ? 'New record!' : 'Run complete'}</h1>
 
       <div className="results">
         <div className="result-main">
           <span className="result-score">{snapshot.score}</span>
-          <span className="result-accuracy">{snapshot.accuracy.toFixed(2)} % de precision</span>
-          <span className="result-combo">Combo max {snapshot.maxCombo}x</span>
+          <span className="result-accuracy">{snapshot.accuracy.toFixed(2)} % accuracy</span>
+          <span className="result-combo">Max combo {snapshot.maxCombo}x</span>
         </div>
         <div className="result-grades">
           {(['PERFECT', 'GOOD', 'MISS'] as const).map((grade) => (
@@ -33,21 +33,19 @@ export function EndScreen({ snapshot, record, onReplay }: Props): JSX.Element {
           ))}
         </div>
 
-        {isRecord && previous && (
-          <p className="result-record">Ancien record : {previous.score}</p>
-        )}
-        {isRecord && !previous && <p className="result-record">Premier score enregistre.</p>}
+        {isRecord && previous && <p className="result-record">Previous best: {previous.score}</p>}
+        {isRecord && !previous && <p className="result-record">First score saved.</p>}
         {!isRecord && record && (
           <p className="result-record">
-            Meilleur score : {record.best.score} ({record.best.accuracy.toFixed(2)} %)
+            Best: {record.best.score} ({record.best.accuracy.toFixed(2)} %)
           </p>
         )}
       </div>
 
       <button type="button" onClick={onReplay}>
-        Rejouer
+        Play again
       </button>
-      <p className="small">Astuce : touche R pour relancer sans passer par ce menu.</p>
+      <p className="small">Tip: press R to restart without coming back here.</p>
     </div>
   );
 }

@@ -1,9 +1,9 @@
 /**
- * Hand tracking : MediaPipe Hand Landmarker (Tasks Vision) + machine a etats du
- * pincement.
+ * Hand tracking: MediaPipe Hand Landmarker (Tasks Vision) plus the pinch state
+ * machine.
  *
- * Le module ne connait rien au jeu : il expose des `HandState` avec une position
- * de pincement normalisee et un evenement `justPinched` (front montant).
+ * This module knows nothing about the game: it exposes `HandState` objects with
+ * a normalised pinch position and a `justPinched` rising edge.
  */
 
 import { FilesetResolver, HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
@@ -11,7 +11,7 @@ import { Point2DFilter } from './oneEuro';
 import { assets, settings } from '../config/settings';
 import type { Vec2 } from '../game/types';
 
-/** Index des landmarks utilises (sur les 21 fournis par MediaPipe). */
+/** The landmarks the decision uses (out of the 21 MediaPipe reports). */
 export const LM = {
   WRIST: 0,
   THUMB_TIP: 4,
@@ -19,22 +19,22 @@ export const LM = {
   MIDDLE_MCP: 9,
 } as const;
 
-/** Nombre de landmarks d'une main chez MediaPipe. */
+/** Landmarks per hand in MediaPipe's model. */
 export const LANDMARK_COUNT = 21;
 
 /**
- * Os du squelette : paires d'index a relier pour dessiner la main.
- * Paume, puis pouce, index, majeur, annulaire, auriculaire.
+ * Skeleton bones: pairs of landmark indices to connect when drawing.
+ * Palm, then thumb, index, middle, ring, pinky.
  */
 export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
-  // paume
+  // palm
   [0, 1],
   [0, 5],
   [5, 9],
   [9, 13],
   [13, 17],
   [0, 17],
-  // pouce
+  // thumb
   [1, 2],
   [2, 3],
   [3, 4],
@@ -42,45 +42,45 @@ export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
   [5, 6],
   [6, 7],
   [7, 8],
-  // majeur
+  // middle
   [9, 10],
   [10, 11],
   [11, 12],
-  // annulaire
+  // ring
   [13, 14],
   [14, 15],
   [15, 16],
-  // auriculaire
+  // pinky
   [17, 18],
   [18, 19],
   [19, 20],
 ];
 
-/** Main gauche / droite telle que rapportee par MediaPipe. */
+/** Left / right hand as reported by MediaPipe. */
 export type Handedness = 'Left' | 'Right';
 
-/** Etat persistant d'une main : filtres de lissage + hysteresis du pincement. */
+/** Per-hand persistent state: smoothing filters plus the pinch state machine. */
 export class HandState {
-  /** Les 21 landmarks lisses, en coordonnees image miroir (0..1). Vide si non suivie. */
+  /** The 21 smoothed landmarks, in mirrored image coordinates (0..1). Empty when lost. */
   landmarks: Vec2[] = [];
-  /** Bout du pouce, lisse, en coordonnees image miroir (0..1). */
+  /** Smoothed thumb tip, in mirrored image coordinates (0..1). */
   thumb: Vec2 | null = null;
-  /** Bout de l'index, lisse. */
+  /** Smoothed index tip. */
   index: Vec2 | null = null;
-  /** Curseur de jeu : milieu pouce/index. */
+  /** Game cursor: midpoint of thumb and index. */
   pinchPos: Vec2 | null = null;
-  /** Ratio de pincement courant (distance pouce-index / taille de main). */
+  /** Current pinch ratio (thumb-index distance over hand size). */
   ratio = 1;
-  /** Etat courant de l'hysteresis. */
+  /** Current hysteresis state. */
   pinching = false;
-  /** Vrai pendant UNE frame, sur la transition relache -> actif. */
+  /** True for ONE frame, on the released -> active transition. */
   justPinched = false;
-  /** La main est-elle suivie en ce moment ? */
+  /** Is this hand currently tracked? */
   visible = false;
-  /** Gauche / droite selon MediaPipe (sert a garder un slot stable). */
+  /** Left / right per MediaPipe (used to keep a stable slot). */
   handedness: Handedness | null = null;
 
-  /** Un filtre One-Euro 2D par landmark : le squelette entier est lisse. */
+  /** One 2D One-Euro filter per landmark: the whole skeleton is smoothed. */
   private readonly filters: Point2DFilter[] = Array.from(
     { length: LANDMARK_COUNT },
     () => new Point2DFilter(settings.OEF_MIN_CUTOFF, settings.OEF_BETA, settings.OEF_D_CUTOFF),
@@ -91,9 +91,9 @@ export class HandState {
   constructor(readonly id: number) {}
 
   /**
-   * @param landmarks les 21 landmarks de la main
-   * @param tSec horloge de lissage (secondes)
-   * @param nowMs horloge du cooldown (millisecondes)
+   * @param landmarks the hand's 21 landmarks
+   * @param tSec smoothing clock (seconds)
+   * @param nowMs cooldown clock (milliseconds)
    */
   update(
     landmarks: NormalizedLandmark[],
@@ -101,8 +101,8 @@ export class HandState {
     nowMs: number,
     handedness: Handedness | null = null,
   ): void {
-    // La video est affichee en miroir horizontal (sinon injouable) : on miroite
-    // les landmarks pour rester dans le meme repere que le rendu.
+    // The video is displayed mirrored (otherwise the game is unplayable), so the
+    // landmarks are mirrored too and everything downstream shares one space.
     const smoothed: Vec2[] = [];
     for (let i = 0; i < LANDMARK_COUNT; i++) {
       const raw = landmarks[i];
@@ -123,13 +123,13 @@ export class HandState {
     this.index = index;
     this.pinchPos = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2 };
 
-    // Ratio normalise par la taille de la main (poignet -> base du majeur) :
-    // rend le seuil independant de la distance a la webcam.
-    const dPinch = Math.hypot(thumb.x - index.x, thumb.y - index.y);
-    const dHand = Math.hypot(wrist.x - middle.x, wrist.y - middle.y);
-    this.ratio = dHand > 1e-4 ? dPinch / dHand : 1;
+    // Normalising by hand size (wrist -> middle-finger base) makes the threshold
+    // independent of the distance to the webcam.
+    const pinchDistance = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+    const handSize = Math.hypot(wrist.x - middle.x, wrist.y - middle.y);
+    this.ratio = handSize > 1e-4 ? pinchDistance / handSize : 1;
 
-    // Hysteresis : deux seuils distincts, plus un cooldown anti double-trigger.
+    // Hysteresis: two separate thresholds, plus a cooldown against double-fires.
     this.justPinched = false;
     if (!this.pinching && this.ratio < settings.PINCH_ON_RATIO) {
       this.pinching = true;
@@ -145,7 +145,7 @@ export class HandState {
     this.visible = true;
   }
 
-  /** Main absente de cette frame : on la garde un instant, puis on l'oublie. */
+  /** Hand absent from this frame: kept briefly, then forgotten. */
   markMissing(tSec: number): void {
     this.justPinched = false;
     if (tSec - this.lastSeen > settings.HAND_LOST_TIMEOUT) {
@@ -168,7 +168,7 @@ export class HandState {
   }
 }
 
-/** Erreurs remontees a l'UI pour affichage d'un message clair. */
+/** Errors surfaced to the UI so it can show a clear message. */
 export class TrackingError extends Error {
   constructor(
     readonly code: 'NO_MEDIA_DEVICES' | 'MODEL_LOAD_FAILED' | 'CAMERA_FAILED',
@@ -196,14 +196,14 @@ export class HandTracker {
     return this.video !== null && this.video.videoWidth > 0;
   }
 
-  /** Charge le wasm + le modele. Idempotent. */
-  async loadModel(onProgress?: (msg: string) => void): Promise<void> {
+  /** Loads the wasm runtime and the model. Idempotent. */
+  async loadModel(onProgress?: (message: string) => void): Promise<void> {
     if (this.landmarker) return;
     try {
-      onProgress?.('Chargement du moteur de vision…');
+      onProgress?.('Loading the vision runtime…');
       const fileset = await FilesetResolver.forVisionTasks(assets.wasmPath);
 
-      onProgress?.('Chargement du modele de mains…');
+      onProgress?.('Loading the hand model…');
       this.landmarker = await HandLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: assets.modelUrl, delegate: 'GPU' },
         runningMode: 'VIDEO',
@@ -213,7 +213,7 @@ export class HandTracker {
         minTrackingConfidence: settings.MIN_TRACKING_CONF,
       });
     } catch (err) {
-      throw new TrackingError('MODEL_LOAD_FAILED', 'Chargement du modele impossible', err);
+      throw new TrackingError('MODEL_LOAD_FAILED', 'Could not load the hand model', err);
     }
 
     for (let i = this.hands.length; i < settings.MAX_HANDS; i++) {
@@ -221,16 +221,13 @@ export class HandTracker {
     }
   }
 
-  /** Demande la webcam et demarre le flux. Idempotent. */
-  async startCamera(onProgress?: (msg: string) => void): Promise<HTMLVideoElement> {
+  /** Requests the webcam and starts the stream. Idempotent. */
+  async startCamera(onProgress?: (message: string) => void): Promise<HTMLVideoElement> {
     if (this.video && this.cameraReady) return this.video;
 
-    onProgress?.('Demande d\'acces a la webcam…');
+    onProgress?.('Requesting webcam access…');
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new TrackingError(
-        'NO_MEDIA_DEVICES',
-        'API webcam indisponible (contexte non securise ?)',
-      );
+      throw new TrackingError('NO_MEDIA_DEVICES', 'Webcam API unavailable (insecure context?)');
     }
 
     this.stream = await navigator.mediaDevices.getUserMedia({
@@ -245,7 +242,7 @@ export class HandTracker {
     video.srcObject = this.stream;
     await video.play();
 
-    // Certains navigateurs renvoient 0x0 pendant quelques frames.
+    // Some browsers report 0x0 for the first few frames.
     await new Promise<void>((resolve) => {
       const check = (): void => {
         if (video.videoWidth > 0) resolve();
@@ -259,19 +256,19 @@ export class HandTracker {
   }
 
   /**
-   * Detection sur la frame video courante. A appeler une fois par frame de rendu ;
-   * saute automatiquement si la webcam n'a pas produit de nouvelle image.
+   * Runs detection on the current video frame. Call once per render frame; it
+   * skips automatically when the webcam has not produced a new image.
    *
-   * @param tSec horloge de jeu (pour le lissage)
-   * @param nowMs performance.now() (timestamp exige par MediaPipe)
+   * @param tSec game clock (for smoothing)
+   * @param nowMs performance.now() (timestamp MediaPipe requires)
    */
   detect(tSec: number, nowMs: number): void {
     const video = this.video;
     if (!video || !this.landmarker || video.videoWidth === 0) return;
 
-    // `justPinched` est un front, valable UNE frame de rendu. La webcam tourne a
-    // ~30 fps et la boucle a 60 : sans cet effacement, l'evenement resterait vrai
-    // sur la frame suivante et un seul pincement declencherait deux hits.
+    // `justPinched` is a rising edge, valid for ONE render frame. The webcam runs
+    // at ~30 fps against a 60 fps loop: without this clear, the flag would still
+    // be standing next frame and one pinch would trigger two hits.
     for (const hand of this.hands) hand.justPinched = false;
 
     if (video.currentTime === this.lastVideoTime) return;
@@ -284,12 +281,12 @@ export class HandTracker {
       landmarks = result.landmarks;
       handednesses = result.handednesses;
     } catch {
-      return; // frame invalide : on saute, la suivante repartira
+      return; // invalid frame: skip it, the next one recovers
     }
 
-    // Affectation stable des slots : la main gauche garde le slot 0, la droite le
-    // slot 1. Sans ca, MediaPipe peut permuter l'ordre des detections d'une frame
-    // a l'autre et les filtres de lissage sauteraient d'une main a l'autre.
+    // Stable slot assignment: the left hand keeps slot 0, the right one slot 1.
+    // Without this, MediaPipe can swap detection order between frames and the
+    // smoothing filters would jump from one hand to the other.
     const assigned = new Map<number, { lm: NormalizedLandmark[]; handedness: Handedness | null }>();
     for (let i = 0; i < landmarks.length; i++) {
       const lm = landmarks[i];
@@ -299,8 +296,8 @@ export class HandTracker {
 
       let slot = this.hands.length > 1 && handedness === 'Right' ? 1 : 0;
       if (assigned.has(slot)) {
-        // Collision (deux fois la meme handedness, ou une seule main suivie) :
-        // on prend le premier slot libre.
+        // Collision (same handedness twice, or a single tracked hand): take the
+        // first free slot instead.
         slot = this.hands.findIndex((_, index) => !assigned.has(index));
         if (slot < 0) continue;
       }
@@ -316,22 +313,22 @@ export class HandTracker {
     }
   }
 
-  /** Nombre de mains actuellement suivies. */
+  get anyHandVisible(): boolean {
+    return this.hands.some((hand) => hand.visible);
+  }
+
+  /** Number of hands currently tracked. */
   get visibleHandCount(): number {
     return this.hands.reduce((n, hand) => n + (hand.visible ? 1 : 0), 0);
   }
 
-  get anyHandVisible(): boolean {
-    return this.hands.some((h) => h.visible);
-  }
-
   resetHands(): void {
-    for (const h of this.hands) h.reset();
+    for (const hand of this.hands) hand.reset();
   }
 
-  /** Libere la webcam (utile au demontage du composant). */
+  /** Releases the webcam (useful when tearing the app down). */
   dispose(): void {
-    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
     this.video = null;
     this.landmarker?.close();

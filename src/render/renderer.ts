@@ -1,21 +1,24 @@
 /**
- * Rendu canvas : video en miroir, cibles + cercles d'approche, effets, mains.
+ * Canvas rendering: mirrored video, targets and approach rings, effects, hands.
  *
- * Le HUD (score, combo, grade) est en DOM React par dessus le canvas : plus lisible,
- * plus facile a restyler, et ca evite de redessiner du texte a 60 fps.
+ * The HUD (score, combo, grade) is React DOM on top of the canvas: easier to
+ * read, easier to restyle, and it avoids redrawing text at 60 fps.
  */
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import type { GameEngine } from '../game/engine';
 import { HAND_CONNECTIONS, LANDMARK_COUNT, type HandState } from '../lib/handTracking';
-import { radiusPx, toScreen, type View } from './view';
+import { radiusPx, toScreen, type Playfield, type View } from './view';
 
 export interface RenderInput {
   ctx: CanvasRenderingContext2D;
-  /** Dimensions en pixels CSS (le DPR est deja applique via setTransform). */
+  /** Size in CSS pixels (the DPR is already applied via setTransform). */
   width: number;
   height: number;
+  /** Where the webcam image is drawn. Landmarks map through this. */
   view: View;
+  /** Visible area where targets live. Targets map through this. */
+  playfield: Playfield;
   video: HTMLVideoElement | null;
   engine: GameEngine;
   hands: readonly HandState[];
@@ -24,6 +27,7 @@ export interface RenderInput {
 
 export function renderFrame(input: RenderInput): void {
   drawVideo(input);
+  if (settings.SHOW_PLAYFIELD) drawPlayfield(input);
   drawTargets(input);
   drawEffects(input);
   drawHands(input);
@@ -31,94 +35,48 @@ export function renderFrame(input: RenderInput): void {
   if (settings.DEBUG) drawDebug(input);
 }
 
-/**
- * Jauge de pincement, une par main suivie.
- *
- * Montre le ratio courant et les deux seuils d'hysteresis. C'est le diagnostic
- * le plus direct : si la jauge ne descend jamais sous le seuil bas quand tu
- * pinces, le probleme est la detection (seuil, lumiere, angle de la main), pas
- * le jeu.
- */
-function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
-  const visible = hands.filter((h) => h.visible);
-  if (visible.length === 0) return;
-
-  const barWidth = 132;
-  const barHeight = 8;
-  const x = width - barWidth - 24;
-  let y = height - 34 - (visible.length - 1) * 30;
-
-  for (const hand of visible) {
-    // Le ratio depasse rarement 1.2 ; au-dela l'echelle n'apprend plus rien.
-    const scale = (value: number): number => Math.min(value / 1.2, 1) * barWidth;
-
-    ctx.save();
-    ctx.fillStyle = 'rgba(6,6,14,0.55)';
-    ctx.fillRect(x - 6, y - 16, barWidth + 12, barHeight + 26);
-
-    // Fond + zone "pince" (sous le seuil bas).
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.fillRect(x, y, barWidth, barHeight);
-    ctx.fillStyle = 'rgba(77,255,176,0.22)';
-    ctx.fillRect(x, y, scale(settings.PINCH_ON_RATIO), barHeight);
-
-    // Ratio courant.
-    ctx.fillStyle = hand.pinching ? '#4dffb0' : '#ffffff';
-    ctx.fillRect(x, y, scale(hand.ratio), barHeight);
-
-    // Les deux seuils.
-    for (const threshold of [settings.PINCH_ON_RATIO, settings.PINCH_OFF_RATIO]) {
-      ctx.fillStyle = 'rgba(255,255,255,0.75)';
-      ctx.fillRect(x + scale(threshold) - 1, y - 3, 2, barHeight + 6);
-    }
-
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.font = "600 11px 'Segoe UI', system-ui, sans-serif";
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(
-      `main ${hand.id + 1} · ratio ${hand.ratio.toFixed(2)}${hand.pinching ? ' · PINCE' : ''}`,
-      x,
-      y - 4,
-    );
-    ctx.restore();
-    y += 30;
-  }
-}
-
 /* ------------------------------------------------------------------ video ---- */
 
 function drawVideo({ ctx, width, height, view, video }: RenderInput): void {
   ctx.save();
   if (video && video.videoWidth > 0) {
-    // Miroir horizontal : sans ca, le jeu est injouable (la main part du mauvais cote).
-    ctx.translate(view.dx + view.dw, view.dy);
+    // Mirrored: without this the game is unplayable, the hand moves the wrong way.
+    ctx.translate(view.x + view.width, view.y);
     ctx.scale(-1, 1);
-    ctx.drawImage(video, 0, 0, view.dw, view.dh);
+    ctx.drawImage(video, 0, 0, view.width, view.height);
   } else {
     ctx.fillStyle = '#0b0b16';
     ctx.fillRect(0, 0, width, height);
   }
   ctx.restore();
 
-  // Voile sombre : les cibles ressortent nettement sur l'image webcam.
+  // Dark veil so the targets read clearly over the webcam image.
   ctx.fillStyle = 'rgba(6,6,14,0.45)';
   ctx.fillRect(0, 0, width, height);
 }
 
-/* ----------------------------------------------------------------- cibles ---- */
+/** Debug outline of the area targets can occupy. */
+function drawPlayfield({ ctx, playfield }: RenderInput): void {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(77,216,255,0.35)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.strokeRect(playfield.x, playfield.y, playfield.width, playfield.height);
+  ctx.restore();
+}
 
-function drawTargets({ ctx, view, engine }: RenderInput): void {
+/* ---------------------------------------------------------------- targets ---- */
+
+function drawTargets({ ctx, playfield, engine }: RenderInput): void {
   const now = engine.time;
 
-  // Des plus tardives vers les plus proches : la note a jouer est dessinee au-dessus.
+  // Latest first, so the note to play is drawn on top.
   const visible = engine.activeTargets().sort((a, b) => b.t - a.t);
 
   for (const target of visible) {
-    const p = toScreen(view, target);
-    // Rayon propre a la phase (les cibles faciles sont plus grosses).
-    const rTarget = radiusPx(view, target.radius);
-    // Le temps d'approche est celui de la phase de la note (phase 1 tres lente).
+    const p = toScreen(playfield, target);
+    // Radius comes from the phase (easy targets are bigger).
+    const rTarget = radiusPx(playfield, target.radius);
     const age = now - (target.t - target.approach); // 0 -> target.approach
     const progress = Math.min(age / target.approach, 1.35);
     const alpha = Math.min(age / settings.FADE_IN, 1);
@@ -127,7 +85,7 @@ function drawTargets({ ctx, view, engine }: RenderInput): void {
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // Disque
+    // Disc
     const gradient = ctx.createRadialGradient(p.x, p.y, rTarget * 0.15, p.x, p.y, rTarget);
     gradient.addColorStop(0, 'rgba(255,255,255,0.30)');
     gradient.addColorStop(1, 'rgba(120,120,255,0.06)');
@@ -136,7 +94,7 @@ function drawTargets({ ctx, view, engine }: RenderInput): void {
     ctx.arc(p.x, p.y, rTarget, 0, Math.PI * 2);
     ctx.fill();
 
-    // Anneau : passe au blanc lumineux pendant la fenetre Perfect.
+    // Ring: turns bright white during the Perfect window.
     const inPerfect = Math.abs(now - target.t) <= target.perfectWindow;
     ctx.lineWidth = inPerfect ? 6 : 4;
     ctx.strokeStyle = inPerfect ? '#ffffff' : '#8ea2ff';
@@ -149,7 +107,7 @@ function drawTargets({ ctx, view, engine }: RenderInput): void {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Cercle d'approche : atteint exactement le rayon de la cible a l'instant t.
+    // Approach ring: reaches the target radius exactly on the beat.
     if (progress <= 1.05) {
       const k = Math.min(progress, 1);
       const rApproach = rTarget * (settings.APPROACH_START - (settings.APPROACH_START - 1) * k);
@@ -163,39 +121,39 @@ function drawTargets({ ctx, view, engine }: RenderInput): void {
   }
 }
 
-/* ----------------------------------------------------------------- effets ---- */
+/* ---------------------------------------------------------------- effects ---- */
 
-function drawEffects({ ctx, width, height, view, engine }: RenderInput): void {
+function drawEffects({ ctx, width, height, playfield, engine }: RenderInput): void {
   const { effects } = engine;
 
-  for (const e of effects.items) {
-    const p = toScreen(view, e);
+  for (const effect of effects.items) {
+    const p = toScreen(playfield, effect);
     ctx.save();
-    ctx.globalAlpha = Math.max(0, e.life);
-    if (e.kind === 'particle') {
-      ctx.fillStyle = e.color;
+    ctx.globalAlpha = Math.max(0, effect.life);
+    if (effect.kind === 'particle') {
+      ctx.fillStyle = effect.color;
       ctx.beginPath();
-      ctx.arc(p.x, p.y, e.size * e.life, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, effect.size * effect.life, 0, Math.PI * 2);
       ctx.fill();
-    } else if (e.kind === 'ghost') {
-      // Pincement reconnu, rien touche : petit anneau qui se resserre.
-      const r = radiusPx(view, settings.TARGET_RADIUS) * (0.55 + e.life * 0.35);
-      ctx.globalAlpha = Math.max(0, e.life) * 0.65;
-      ctx.strokeStyle = e.color;
+    } else if (effect.kind === 'ghost') {
+      // Pinch recognised, nothing hit: a small ring that tightens.
+      const r = radiusPx(playfield, settings.TARGET_RADIUS) * (0.55 + effect.life * 0.35);
+      ctx.globalAlpha = Math.max(0, effect.life) * 0.65;
+      ctx.strokeStyle = effect.color;
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.stroke();
-    } else if (e.kind === 'ring') {
-      const r = radiusPx(view, settings.TARGET_RADIUS) * (1 + (1 - e.life) * 1.8);
-      ctx.strokeStyle = e.color;
-      ctx.lineWidth = 4 * e.life;
+    } else if (effect.kind === 'ring') {
+      const r = radiusPx(playfield, settings.TARGET_RADIUS) * (1 + (1 - effect.life) * 1.8);
+      ctx.strokeStyle = effect.color;
+      ctx.lineWidth = 4 * effect.life;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.stroke();
     } else {
-      const r = radiusPx(view, settings.TARGET_RADIUS) * 0.6;
-      ctx.strokeStyle = e.color;
+      const r = radiusPx(playfield, settings.TARGET_RADIUS) * 0.6;
+      ctx.strokeStyle = effect.color;
       ctx.lineWidth = 4;
       ctx.lineCap = 'round';
       ctx.beginPath();
@@ -217,17 +175,17 @@ function drawEffects({ ctx, width, height, view, engine }: RenderInput): void {
   }
 }
 
-/* ------------------------------------------------------------------ mains ---- */
+/* ------------------------------------------------------------------ hands ---- */
 
-/** Couleur d'accent par main : slot 0 cyan, slot 1 magenta. */
+/** Accent colour per hand: slot 0 cyan, slot 1 magenta. */
 function handAccent(hand: HandState): string {
   return hand.id === 0 ? '#4dd8ff' : '#ff5edb';
 }
 
 /**
- * Squelette complet : 21 landmarks relies par HAND_CONNECTIONS.
- * Rendu en deux passes (trait sombre epais puis trait clair) pour rester lisible
- * sur n'importe quel fond video.
+ * Full skeleton: 21 landmarks joined by HAND_CONNECTIONS.
+ * Drawn in two passes (thick dark stroke, then a light one) so it stays legible
+ * over any webcam background.
  */
 function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState): void {
   const points = hand.landmarks;
@@ -255,7 +213,7 @@ function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState
     ctx.stroke();
   }
 
-  // Articulations. Les bouts de doigts sont un peu plus gros.
+  // Joints. Fingertips are drawn a little larger.
   ctx.globalAlpha = 1;
   const tips = new Set([4, 8, 12, 16, 20]);
   for (let i = 0; i < screen.length; i++) {
@@ -273,7 +231,7 @@ function drawHands({ ctx, view, hands }: RenderInput): void {
   for (const hand of hands) {
     if (!hand.visible || !hand.thumb || !hand.index || !hand.pinchPos) continue;
 
-    // Squelette d'abord : il passe sous les reperes de pincement.
+    // Skeleton first: it sits under the pinch markers.
     if (settings.SHOW_SKELETON) drawSkeleton(ctx, view, hand);
 
     const thumb = toScreen(view, hand.thumb);
@@ -283,7 +241,7 @@ function drawHands({ ctx, view, hands }: RenderInput): void {
     ctx.save();
     ctx.lineCap = 'round';
 
-    // Ligne pouce-index : s'epaissit et vire au vert quand le pincement est actif.
+    // Thumb-index line: thickens and turns green while the pinch is active.
     ctx.lineWidth = hand.pinching ? 9 : 3;
     ctx.strokeStyle = hand.pinching ? '#4dffb0' : 'rgba(255,255,255,0.55)';
     if (hand.pinching) {
@@ -296,24 +254,80 @@ function drawHands({ ctx, view, hands }: RenderInput): void {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Bouts des doigts, dans la couleur de la main (slot 0 cyan, slot 1 magenta).
-    for (const pt of [thumb, index]) {
+    // Fingertips, in the hand's colour.
+    for (const point of [thumb, index]) {
       ctx.fillStyle = handAccent(hand);
       ctx.beginPath();
-      ctx.arc(pt.x, pt.y, hand.pinching ? 9 : 7, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, hand.pinching ? 9 : 7, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = 'rgba(255,255,255,0.9)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
 
-    // Curseur = point milieu.
+    // Cursor = midpoint.
     ctx.strokeStyle = hand.pinching ? '#4dffb0' : 'rgba(255,255,255,0.35)';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(mid.x, mid.y, hand.pinching ? 16 : 11, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
+  }
+}
+
+/* ------------------------------------------------------------ pinch meter ---- */
+
+/**
+ * Pinch gauge, one per tracked hand.
+ *
+ * Shows the live ratio and both hysteresis thresholds. This is the most direct
+ * diagnosis available: if the bar never drops below the low threshold when you
+ * pinch, the problem is detection (threshold, lighting, hand angle), not the game.
+ */
+function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
+  const visible = hands.filter((hand) => hand.visible);
+  if (visible.length === 0) return;
+
+  const barWidth = 132;
+  const barHeight = 8;
+  const x = width - barWidth - 24;
+  let y = height - 34 - (visible.length - 1) * 30;
+
+  for (const hand of visible) {
+    // The ratio rarely exceeds 1.2; beyond that the scale stops being useful.
+    const scale = (value: number): number => Math.min(value / 1.2, 1) * barWidth;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,6,14,0.55)';
+    ctx.fillRect(x - 6, y - 16, barWidth + 12, barHeight + 26);
+
+    // Background plus the "pinched" zone (below the low threshold).
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = 'rgba(77,255,176,0.22)';
+    ctx.fillRect(x, y, scale(settings.PINCH_ON_RATIO), barHeight);
+
+    // Current ratio.
+    ctx.fillStyle = hand.pinching ? '#4dffb0' : '#ffffff';
+    ctx.fillRect(x, y, scale(hand.ratio), barHeight);
+
+    // Both thresholds.
+    for (const threshold of [settings.PINCH_ON_RATIO, settings.PINCH_OFF_RATIO]) {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillRect(x + scale(threshold) - 1, y - 3, 2, barHeight + 6);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = "600 11px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(
+      `pinch ratio ${hand.ratio.toFixed(2)}${hand.pinching ? ' · PINCHED' : ''}`,
+      x,
+      y - 4,
+    );
+    ctx.restore();
+    y += 30;
   }
 }
 
@@ -328,13 +342,13 @@ function drawDebug({ ctx, engine, hands, fps }: RenderInput): void {
   const lines = [
     `fps ${fps.toFixed(0)}   t ${engine.time.toFixed(2)}s`,
     ...hands.map(
-      (h) =>
-        `main${h.id} ${h.visible ? 'OK' : '--'} ${(h.handedness ?? '?').padEnd(5)} ` +
-        `ratio ${h.ratio.toFixed(3)} ${h.pinching ? '[PINCE]' : ''}`,
+      (hand) =>
+        `hand${hand.id} ${hand.visible ? 'OK' : '--'} ${(hand.handedness ?? '?').padEnd(5)} ` +
+        `ratio ${hand.ratio.toFixed(3)} ${hand.pinching ? '[PINCHED]' : ''}`,
     ),
+    `thresholds on<${settings.PINCH_ON_RATIO} off>${settings.PINCH_OFF_RATIO}`,
     `phase ${engine.currentPhaseIndex + 1}`,
-    `seuils on<${settings.PINCH_ON_RATIO} off>${settings.PINCH_OFF_RATIO}`,
-    `cibles actives ${engine.activeTargets().length}  effets ${engine.effects.items.length}`,
+    `active targets ${engine.activeTargets().length}  effects ${engine.effects.items.length}`,
   ];
   lines.forEach((line, i) => ctx.fillText(line, 16, 16 + i * 16));
   ctx.restore();

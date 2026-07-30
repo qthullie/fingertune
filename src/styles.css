@@ -1,4 +1,4 @@
-/* Fingertune — styles globaux. Le jeu occupe tout le viewport. */
+/* Fingertune — global styles. The game fills the whole viewport. */
 
 :root {
   color-scheme: dark;
@@ -57,7 +57,7 @@ body,
 }
 
 .logo {
-  /* Sprite pixel-art : surtout pas de lissage a l'agrandissement. */
+  /* Pixel-art sprite: never let the browser smooth it when scaling up. */
   image-rendering: pixelated;
   filter: drop-shadow(0 6px 18px rgba(255, 94, 219, 0.35));
 }
@@ -185,7 +185,7 @@ kbd {
   font-size: 12px;
 }
 
-/* -------------------------------------------------------------------- resultat -- */
+/* --------------------------------------------------------------------- results -- */
 
 .results {
   display: flex;

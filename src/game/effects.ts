@@ -1,6 +1,6 @@
 /**
- * Effets visuels : particules, anneau d'explosion, croix de miss, flash plein ecran.
- * Purement decoratif — aucune influence sur le score.
+ * Visual effects: particles, burst rings, miss crosses, full-screen flash.
+ * Purely decorative — none of it touches the score.
  */
 
 import type { Vec2 } from './types';
@@ -11,7 +11,7 @@ export interface Effect extends Vec2 {
   kind: EffectKind;
   vx: number;
   vy: number;
-  /** 1 -> 0. L'effet meurt a 0. */
+  /** 1 -> 0. The effect dies at 0. */
   life: number;
   decay: number;
   color: string;
@@ -23,7 +23,7 @@ export class EffectSystem {
   flashColor = '#ffffff';
   flashAmount = 0;
 
-  /** Explosion de particules + anneau, au hit. */
+  /** Particle burst plus a ring, on a hit. */
   burst(at: Vec2, color: string, count: number): void {
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -53,7 +53,7 @@ export class EffectSystem {
     });
   }
 
-  /** Croix rouge discrete sur un miss. */
+  /** Discreet red cross on a miss. */
   miss(at: Vec2, color: string): void {
     this.items.push({
       kind: 'miss',
@@ -68,7 +68,7 @@ export class EffectSystem {
     });
   }
 
-  /** Pincement reconnu mais qui n'a touche aucune cible : anneau blanc discret. */
+  /** Pinch recognised but nothing hit: a small white ring. */
   pinchGhost(at: Vec2): void {
     this.items.push({
       kind: 'ghost',
@@ -88,20 +88,20 @@ export class EffectSystem {
     this.flashAmount = Math.max(this.flashAmount, amount);
   }
 
-  /** @param dt secondes ecoulees depuis la frame precedente. */
+  /** @param dt seconds elapsed since the previous frame. */
   update(dt: number): void {
-    for (const e of this.items) {
-      e.life -= e.decay * dt;
-      if (e.kind === 'particle') {
-        e.x += e.vx * dt;
-        e.y += e.vy * dt;
-        e.vy += 0.55 * dt; // petite gravite
-        e.vx *= 0.97;
-        e.vy *= 0.97;
+    for (const effect of this.items) {
+      effect.life -= effect.decay * dt;
+      if (effect.kind === 'particle') {
+        effect.x += effect.vx * dt;
+        effect.y += effect.vy * dt;
+        effect.vy += 0.55 * dt; // a little gravity
+        effect.vx *= 0.97;
+        effect.vy *= 0.97;
       }
     }
-    if (this.items.some((e) => e.life <= 0)) {
-      this.items = this.items.filter((e) => e.life > 0);
+    if (this.items.some((effect) => effect.life <= 0)) {
+      this.items = this.items.filter((effect) => effect.life > 0);
     }
     this.flashAmount = Math.max(0, this.flashAmount - dt * 2.2);
   }

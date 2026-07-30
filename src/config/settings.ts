@@ -1,81 +1,84 @@
 /**
- * TOUS LES REGLAGES DU JEU.
+ * EVERY TUNABLE IN THE GAME.
  *
- * C'est le seul fichier a toucher pour calibrer le feeling : seuils de pincement,
- * taille des cibles, fenetres de timing, vitesse du cercle d'approche, lissage.
+ * This is the only file to touch to change how the game feels: pinch thresholds,
+ * target size, timing windows, approach-ring speed, smoothing.
  *
- * Les valeurs sont mutables a chaud depuis la console du navigateur :
+ * Values are mutable at runtime from the browser console:
  *   window.fingertune.settings.PINCH_ON_RATIO = 0.35
  */
 
 export interface Settings {
-  /* ---- Pincement (hysteresis : deux seuils, evite le clignotement) ---------------
-     ratio = distance(pouce[4], index[8]) / distance(poignet[0], base majeur[9])
-     Normalise par la taille de la main => robuste a l'eloignement de la webcam. */
-  /** En dessous de ce ratio, le pincement passe ACTIF. */
+  /* ---- Pinch (hysteresis: two thresholds, so noise cannot flicker it) ----------
+     ratio = distance(thumb[4], index[8]) / distance(wrist[0], middle MCP[9])
+     Normalising by hand size makes the threshold independent of how far you sit
+     from the webcam. */
+  /** Below this ratio the pinch becomes ACTIVE. */
   PINCH_ON_RATIO: number;
-  /** Au dessus de ce ratio, le pincement repasse RELACHE. Doit rester > PINCH_ON_RATIO. */
+  /** Above this ratio the pinch is RELEASED. Must stay > PINCH_ON_RATIO. */
   PINCH_OFF_RATIO: number;
-  /** Delai minimum entre deux declenchements (ms), anti double-trigger. */
+  /** Minimum delay between two triggers (ms). Guards against double-fires. */
   PINCH_COOLDOWN_MS: number;
 
-  /* ---- Cibles -------------------------------------------------------------------- */
-  /** Rayon de la cible, en fraction du plus petit cote de la zone video affichee. */
+  /* ---- Targets ------------------------------------------------------------------ */
+  /** Target radius, as a fraction of the playfield's smaller side. */
   TARGET_RADIUS: number;
-  /** Tolerance spatiale du hit = rayon visuel x ce facteur. */
+  /** Hit tolerance = visual radius x this factor. */
   HIT_RADIUS_SCALE: number;
-  /** Duree (s) du cercle d'approche. Valeur de repli : chaque phase de beatmap
-   *  definit la sienne (voir BeatmapPhase.approachTime). */
+  /** Approach-ring duration before the hit instant, in seconds.
+   *  Fallback only: each beatmap phase defines its own (BeatmapPhase.approachTime). */
   APPROACH_TIME: number;
-  /** Rayon initial du cercle d'approche, en multiples du rayon cible. */
+  /** Initial approach-ring radius, in multiples of the target radius. */
   APPROACH_START: number;
-  /** Duree (s) du fondu d'apparition de la cible. */
+  /** Target fade-in duration, in seconds. */
   FADE_IN: number;
+  /** Inner margin of the playfield (fraction of its size), so no target hugs an edge. */
+  PLAYFIELD_PADDING: number;
 
-  /* ---- Fenetres de timing (secondes, sur |now - t|) ------------------------------- */
+  /* ---- Timing windows (seconds, on |now - t|) ------------------------------------ */
   WINDOW_PERFECT: number;
   WINDOW_GOOD: number;
 
-  /* ---- Score ---------------------------------------------------------------------- */
+  /* ---- Score --------------------------------------------------------------------- */
   SCORE_PERFECT: number;
   SCORE_GOOD: number;
-  /** Bonus de score par point de combo (0.02 = +2 % par combo). */
+  /** Score bonus per combo point (0.02 = +2% per combo). */
   COMBO_BONUS: number;
-  /** Plafond du combo pris en compte dans le bonus. */
+  /** Combo value above which the bonus stops growing. */
   COMBO_CAP: number;
 
-  /* ---- Filtre One-Euro (lissage des landmarks) -----------------------------------
-     MIN_CUTOFF bas = tres lisse mais mou. BETA haut = plus reactif aux mouvements
-     rapides (moins de lag) mais laisse passer un peu plus de bruit. */
+  /* ---- One-Euro filter (landmark smoothing) -------------------------------------
+     Low MIN_CUTOFF = very smooth but sluggish. High BETA = more responsive to fast
+     motion (less lag) at the cost of letting a little more jitter through. */
   OEF_MIN_CUTOFF: number;
   OEF_BETA: number;
   OEF_D_CUTOFF: number;
 
-  /* ---- Hand tracking -------------------------------------------------------------- */
-  /** Nombre de mains suivies. 2 = jeu a deux mains (les accords l'exigent). */
+  /* ---- Hand tracking ------------------------------------------------------------- */
+  /** Hands tracked. 1 by default; the whole pipeline already loops over N hands. */
   MAX_HANDS: number;
   MIN_DETECTION_CONF: number;
   MIN_PRESENCE_CONF: number;
   MIN_TRACKING_CONF: number;
-  /** Secondes sans detection avant d'oublier une main. */
+  /** Seconds without a detection before a hand is forgotten. */
   HAND_LOST_TIMEOUT: number;
 
-  /* ---- Divers --------------------------------------------------------------------- */
-  /** Dessine le squelette complet de la main (21 landmarks + connexions). Touche S. */
+  /* ---- Misc ---------------------------------------------------------------------- */
+  /** Draw the full hand skeleton (21 landmarks + bones). Key S. */
   SHOW_SKELETON: boolean;
-  /** Jauge de pincement (ratio + seuils) en bas a droite. Touche P. */
+  /** Live pinch gauge (ratio + thresholds), bottom right. Key P. */
   SHOW_PINCH_METER: boolean;
-  /** Duree (s) d'affichage de la banniere de phase. */
-  PHASE_BANNER_DURATION: number;
-  /** Decompte (s) avant la premiere note. */
+  /** Outline the playfield, so you can see where targets can appear. Key F. */
+  SHOW_PLAYFIELD: boolean;
+  /** Countdown before the first note, in seconds. */
   COUNTDOWN: number;
-  /** Metronome audible (touche M en jeu). */
+  /** Audible metronome (key M in game). */
   METRONOME_ON: boolean;
-  /** Volume general en dB. */
+  /** Master volume, in dB. */
   MASTER_VOLUME: number;
-  /** Volume de la musique perso (VITE_MUSIC_URL) en dB. */
+  /** Volume of a custom music track (VITE_MUSIC_URL), in dB. */
   MUSIC_VOLUME: number;
-  /** Overlay de debug tracking (touche D en jeu). */
+  /** Tracking debug overlay (key D in game). */
   DEBUG: boolean;
 }
 
@@ -86,9 +89,10 @@ export const settings: Settings = {
 
   TARGET_RADIUS: 0.075,
   HIT_RADIUS_SCALE: 1.35,
-  APPROACH_TIME: 1.1,
+  APPROACH_TIME: 1.6,
   APPROACH_START: 3.2,
   FADE_IN: 0.25,
+  PLAYFIELD_PADDING: 0.04,
 
   WINDOW_PERFECT: 0.06,
   WINDOW_GOOD: 0.12,
@@ -102,7 +106,7 @@ export const settings: Settings = {
   OEF_BETA: 0.02,
   OEF_D_CUTOFF: 1.0,
 
-  MAX_HANDS: 2,
+  MAX_HANDS: 1,
   MIN_DETECTION_CONF: 0.5,
   MIN_PRESENCE_CONF: 0.5,
   MIN_TRACKING_CONF: 0.5,
@@ -110,7 +114,7 @@ export const settings: Settings = {
 
   SHOW_SKELETON: true,
   SHOW_PINCH_METER: true,
-  PHASE_BANNER_DURATION: 3.0,
+  SHOW_PLAYFIELD: false,
   COUNTDOWN: 3.0,
   METRONOME_ON: false,
   MASTER_VOLUME: -6,
@@ -119,12 +123,11 @@ export const settings: Settings = {
 };
 
 /**
- * Emplacement des assets MediaPipe.
+ * Where the MediaPipe assets live.
  *
- * Par defaut : wasm servi depuis notre propre origine (copie par
- * scripts/copy-mediapipe-assets.mjs), modele depuis le CDN Google.
- * Pour un jeu 100 % hors ligne : `npm run fetch:model` puis, dans .env.local
- *   VITE_HAND_MODEL_URL=./models/hand_landmarker.task
+ * Defaults: wasm served from our own origin (copied by scripts/copy-assets.mjs),
+ * model from Google's CDN. For a fully offline game: `npm run fetch:model`, then
+ * put VITE_HAND_MODEL_URL=./models/hand_landmarker.task in .env.local
  */
 export const assets = {
   wasmPath:
@@ -134,16 +137,16 @@ export const assets = {
     import.meta.env.VITE_HAND_MODEL_URL ??
     'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
   /**
-   * Musique du morceau. Vide par defaut : la piste est GENEREE par Tone.js
-   * (aucun asset, aucun droit a gerer, et elle suit les phases).
-   * Depose ton fichier dans public/music/ et mets
-   *   VITE_MUSIC_URL=./music/mon-morceau.mp3
-   * dans .env.local pour jouer dessus. Cale alors les `t` de ta beatmap sur lui.
+   * Music track. Empty by default: the soundtrack is GENERATED by Tone.js (no
+   * asset, no licensing, and it follows the phases).
+   * Drop a file in public/music/ and set
+   *   VITE_MUSIC_URL=./music/my-track.mp3
+   * in .env.local to play over it. Then align your beatmap's `t` values to it.
    */
   musicUrl: import.meta.env.VITE_MUSIC_URL,
 } as const;
 
-/** Couleurs des grades, partagees par le canvas et le HUD. */
+/** Grade colours, shared by the canvas and the HUD. */
 export const GRADE_STYLE = {
   PERFECT: { label: 'PERFECT', color: '#4dd8ff', score: () => settings.SCORE_PERFECT, weight: 1.0 },
   GOOD: { label: 'GOOD', color: '#ffd24d', score: () => settings.SCORE_GOOD, weight: 0.34 },

@@ -1,4 +1,4 @@
-/** Catalogue des beatmaps disponibles. Ajoute la tienne ici. */
+/** Catalogue of available beatmaps. Register yours here. */
 
 import type { Beatmap } from '../game/types';
 import { demoBeatmap } from './demo';

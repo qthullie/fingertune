@@ -1,9 +1,9 @@
 /**
- * Filtre One-Euro — lissage reactif des landmarks.
+ * One-Euro filter — responsive smoothing for the landmarks.
  *
- * Principe : un passe-bas dont la frequence de coupure augmente avec la vitesse du
- * signal. Main immobile => tres lisse (zero tremblement). Main rapide => peu de lag.
- * Sans ce filtre, le tracking tremblote et les hits partent au hasard.
+ * A low-pass whose cutoff frequency rises with the speed of the signal. Hand
+ * still => very smooth (no jitter). Hand fast => little lag. Without it the
+ * tracking shivers and hits land at random.
  *
  * Casiez, Roussel & Vogel, "1e Filter" (CHI 2012).
  */
@@ -38,7 +38,7 @@ export class OneEuroFilter {
     return 1 / (1 + tau / dt);
   }
 
-  /** @param t horloge en secondes (monotone). */
+  /** @param t clock in seconds (monotonic). */
   filter(x: number, t: number): number {
     if (this.lastTime === null) {
       this.lastTime = t;
@@ -47,7 +47,7 @@ export class OneEuroFilter {
     }
 
     let dt = t - this.lastTime;
-    if (!(dt > 0)) dt = 1 / 60; // garde-fou : timestamps identiques ou en arriere
+    if (!(dt > 0)) dt = 1 / 60; // guard: identical or backwards timestamps
     this.lastTime = t;
 
     const dx = (x - this.lastValue) / dt;
@@ -66,7 +66,7 @@ export class OneEuroFilter {
   }
 }
 
-/** Paire de filtres One-Euro pour un point 2D. */
+/** A pair of One-Euro filters for a 2D point. */
 export class Point2DFilter {
   private readonly fx: OneEuroFilter;
   private readonly fy: OneEuroFilter;
