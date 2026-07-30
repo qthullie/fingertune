@@ -5,6 +5,15 @@
 <h1 align="center">Fingertune</h1>
 
 <p align="center">
+  <a href="https://qthullie.github.io/fingertune/"><img src="https://img.shields.io/badge/▶%20PLAY%20IT%20NOW-in%20your%20browser-4dd8ff?style=for-the-badge&labelColor=07070d" alt="Play Fingertune in your browser" height="42"/></a>
+</p>
+
+<p align="center">
+  <b><a href="https://qthullie.github.io/fingertune/">qthullie.github.io/fingertune</a></b><br/>
+  <sub>Nothing to install. Allow the webcam and pinch.</sub>
+</p>
+
+<p align="center">
   <a href="https://github.com/qthullie/fingertune/actions/workflows/ci.yml"><img src="https://github.com/qthullie/fingertune/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/MediaPipe-Hand%20Landmarker-ff6f00.svg" alt="MediaPipe Hand Landmarker"/>
@@ -252,6 +261,10 @@ Shortcuts: <kbd>R</kbd> replay · <kbd>M</kbd> metronome · <kbd>S</kbd> skeleto
 <kbd>P</kbd> pinch gauge · <kbd>F</kbd> playfield · <kbd>D</kbd> debug.
 
 ## Quick start
+
+The game is already live at
+**[qthullie.github.io/fingertune](https://qthullie.github.io/fingertune/)** —
+nothing to install. To run or modify it locally:
 
 ```bash
 git clone https://github.com/qthullie/fingertune.git
