@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.svg" alt="fingertune logo — pixel-art approach ring closing on a target" width="160"/>
+  <img src="assets/logo-animated.svg" alt="fingertune logo — a pixel-art approach ring closing on a target, which then bursts" width="160"/>
 </p>
 
 <h1 align="center">Fingertune</h1>
@@ -320,5 +320,6 @@ echo "VITE_HAND_MODEL_URL=./models/hand_landmarker.task" > .env.local
 ## License
 
 [MIT](LICENSE). The `hand_landmarker.task` model is provided by Google under
-Apache 2.0. The pixel-art logo is original artwork, MIT licensed with the
-project.
+Apache 2.0. The pixel-art logo — [static](assets/logo.svg) and
+[animated](assets/logo-animated.svg) — is original artwork, MIT licensed with
+the project.
