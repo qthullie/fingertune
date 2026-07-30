@@ -19,8 +19,50 @@ export const LM = {
   MIDDLE_MCP: 9,
 } as const;
 
+/** Nombre de landmarks d'une main chez MediaPipe. */
+export const LANDMARK_COUNT = 21;
+
+/**
+ * Os du squelette : paires d'index a relier pour dessiner la main.
+ * Paume, puis pouce, index, majeur, annulaire, auriculaire.
+ */
+export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
+  // paume
+  [0, 1],
+  [0, 5],
+  [5, 9],
+  [9, 13],
+  [13, 17],
+  [0, 17],
+  // pouce
+  [1, 2],
+  [2, 3],
+  [3, 4],
+  // index
+  [5, 6],
+  [6, 7],
+  [7, 8],
+  // majeur
+  [9, 10],
+  [10, 11],
+  [11, 12],
+  // annulaire
+  [13, 14],
+  [14, 15],
+  [15, 16],
+  // auriculaire
+  [17, 18],
+  [18, 19],
+  [19, 20],
+];
+
+/** Main gauche / droite telle que rapportee par MediaPipe. */
+export type Handedness = 'Left' | 'Right';
+
 /** Etat persistant d'une main : filtres de lissage + hysteresis du pincement. */
 export class HandState {
+  /** Les 21 landmarks lisses, en coordonnees image miroir (0..1). Vide si non suivie. */
+  landmarks: Vec2[] = [];
   /** Bout du pouce, lisse, en coordonnees image miroir (0..1). */
   thumb: Vec2 | null = null;
   /** Bout de l'index, lisse. */
@@ -35,52 +77,56 @@ export class HandState {
   justPinched = false;
   /** La main est-elle suivie en ce moment ? */
   visible = false;
+  /** Gauche / droite selon MediaPipe (sert a garder un slot stable). */
+  handedness: Handedness | null = null;
 
-  private readonly thumbFilter: Point2DFilter;
-  private readonly indexFilter: Point2DFilter;
+  /** Un filtre One-Euro 2D par landmark : le squelette entier est lisse. */
+  private readonly filters: Point2DFilter[] = Array.from(
+    { length: LANDMARK_COUNT },
+    () => new Point2DFilter(settings.OEF_MIN_CUTOFF, settings.OEF_BETA, settings.OEF_D_CUTOFF),
+  );
   private lastTriggerMs = Number.NEGATIVE_INFINITY;
   private lastSeen = Number.NEGATIVE_INFINITY;
 
-  constructor(readonly id: number) {
-    this.thumbFilter = new Point2DFilter(
-      settings.OEF_MIN_CUTOFF,
-      settings.OEF_BETA,
-      settings.OEF_D_CUTOFF,
-    );
-    this.indexFilter = new Point2DFilter(
-      settings.OEF_MIN_CUTOFF,
-      settings.OEF_BETA,
-      settings.OEF_D_CUTOFF,
-    );
-  }
+  constructor(readonly id: number) {}
 
   /**
    * @param landmarks les 21 landmarks de la main
    * @param tSec horloge de lissage (secondes)
    * @param nowMs horloge du cooldown (millisecondes)
    */
-  update(landmarks: NormalizedLandmark[], tSec: number, nowMs: number): void {
-    const rawThumb = landmarks[LM.THUMB_TIP];
-    const rawIndex = landmarks[LM.INDEX_TIP];
-    const rawWrist = landmarks[LM.WRIST];
-    const rawMiddle = landmarks[LM.MIDDLE_MCP];
-    if (!rawThumb || !rawIndex || !rawWrist || !rawMiddle) return;
-
+  update(
+    landmarks: NormalizedLandmark[],
+    tSec: number,
+    nowMs: number,
+    handedness: Handedness | null = null,
+  ): void {
     // La video est affichee en miroir horizontal (sinon injouable) : on miroite
     // les landmarks pour rester dans le meme repere que le rendu.
-    const mx = (p: NormalizedLandmark): number => 1 - p.x;
+    const smoothed: Vec2[] = [];
+    for (let i = 0; i < LANDMARK_COUNT; i++) {
+      const raw = landmarks[i];
+      const filter = this.filters[i];
+      if (!raw || !filter) return;
+      smoothed.push(filter.filter(1 - raw.x, raw.y, tSec));
+    }
 
-    this.thumb = this.thumbFilter.filter(mx(rawThumb), rawThumb.y, tSec);
-    this.index = this.indexFilter.filter(mx(rawIndex), rawIndex.y, tSec);
-    this.pinchPos = {
-      x: (this.thumb.x + this.index.x) / 2,
-      y: (this.thumb.y + this.index.y) / 2,
-    };
+    const thumb = smoothed[LM.THUMB_TIP];
+    const index = smoothed[LM.INDEX_TIP];
+    const wrist = smoothed[LM.WRIST];
+    const middle = smoothed[LM.MIDDLE_MCP];
+    if (!thumb || !index || !wrist || !middle) return;
+
+    this.landmarks = smoothed;
+    this.handedness = handedness;
+    this.thumb = thumb;
+    this.index = index;
+    this.pinchPos = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2 };
 
     // Ratio normalise par la taille de la main (poignet -> base du majeur) :
     // rend le seuil independant de la distance a la webcam.
-    const dPinch = Math.hypot(this.thumb.x - this.index.x, this.thumb.y - this.index.y);
-    const dHand = Math.hypot(mx(rawWrist) - mx(rawMiddle), rawWrist.y - rawMiddle.y);
+    const dPinch = Math.hypot(thumb.x - index.x, thumb.y - index.y);
+    const dHand = Math.hypot(wrist.x - middle.x, wrist.y - middle.y);
     this.ratio = dHand > 1e-4 ? dPinch / dHand : 1;
 
     // Hysteresis : deux seuils distincts, plus un cooldown anti double-trigger.
@@ -105,12 +151,15 @@ export class HandState {
     if (tSec - this.lastSeen > settings.HAND_LOST_TIMEOUT) {
       this.visible = false;
       this.pinching = false;
+      this.landmarks = [];
+      this.handedness = null;
     }
   }
 
   reset(): void {
-    this.thumbFilter.reset();
-    this.indexFilter.reset();
+    for (const filter of this.filters) filter.reset();
+    this.landmarks = [];
+    this.handedness = null;
     this.pinching = false;
     this.justPinched = false;
     this.visible = false;
@@ -223,19 +272,47 @@ export class HandTracker {
     this.lastVideoTime = video.currentTime;
 
     let landmarks: NormalizedLandmark[][] = [];
+    let handednesses: Array<Array<{ categoryName: string }>> = [];
     try {
-      landmarks = this.landmarker.detectForVideo(video, nowMs).landmarks;
+      const result = this.landmarker.detectForVideo(video, nowMs);
+      landmarks = result.landmarks;
+      handednesses = result.handednesses;
     } catch {
       return; // frame invalide : on saute, la suivante repartira
+    }
+
+    // Affectation stable des slots : la main gauche garde le slot 0, la droite le
+    // slot 1. Sans ca, MediaPipe peut permuter l'ordre des detections d'une frame
+    // a l'autre et les filtres de lissage sauteraient d'une main a l'autre.
+    const assigned = new Map<number, { lm: NormalizedLandmark[]; handedness: Handedness | null }>();
+    for (let i = 0; i < landmarks.length; i++) {
+      const lm = landmarks[i];
+      if (!lm) continue;
+      const raw = handednesses[i]?.[0]?.categoryName;
+      const handedness: Handedness | null = raw === 'Left' || raw === 'Right' ? raw : null;
+
+      let slot = this.hands.length > 1 && handedness === 'Right' ? 1 : 0;
+      if (assigned.has(slot)) {
+        // Collision (deux fois la meme handedness, ou une seule main suivie) :
+        // on prend le premier slot libre.
+        slot = this.hands.findIndex((_, index) => !assigned.has(index));
+        if (slot < 0) continue;
+      }
+      assigned.set(slot, { lm, handedness });
     }
 
     for (let i = 0; i < this.hands.length; i++) {
       const hand = this.hands[i];
       if (!hand) continue;
-      const lm = landmarks[i];
-      if (lm) hand.update(lm, tSec, nowMs);
+      const detection = assigned.get(i);
+      if (detection) hand.update(detection.lm, tSec, nowMs, detection.handedness);
       else hand.markMissing(tSec);
     }
+  }
+
+  /** Nombre de mains actuellement suivies. */
+  get visibleHandCount(): number {
+    return this.hands.reduce((n, hand) => n + (hand.visible ? 1 : 0), 0);
   }
 
   get anyHandVisible(): boolean {

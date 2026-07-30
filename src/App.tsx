@@ -8,8 +8,9 @@ import { GameEngine } from './game/engine';
 import { HandTracker } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
 import { explainError, type FriendlyError } from './lib/errors';
+import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/highscores';
 import { defaultBeatmap } from './beatmaps';
-import { settings } from './config/settings';
+import { assets, settings } from './config/settings';
 
 /**
  * Instances uniques, hors du cycle React.
@@ -29,6 +30,8 @@ export function App(): JSX.Element {
   const [status, setStatus] = useState('Modele de hand tracking non charge (~7 Mo au 1er lancement).');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
+  const [best, setBest] = useState<BestScore | null>(() => loadBest(defaultBeatmap.id));
+  const [record, setRecord] = useState<RecordResult | null>(null);
   const configuredRef = useRef(false);
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
@@ -40,14 +43,30 @@ export function App(): JSX.Element {
         // Le timing du jeu suit l'horloge audio, pas rAF.
         clock: () => audio.now(),
         onHitSound: (grade, combo) => audio.playHit(grade, combo),
-        onFinish: () => setUiPhase('end'),
+        onMissSound: (brokeCombo) => audio.playMiss(brokeCombo),
+        // La musique monte d'un cran a chaque phase.
+        onPhaseChange: (index) => audio.setIntensity(index),
+        onFinish: () => {
+          // Fin de beatmap : on soumet le score au tableau local.
+          const final = engine.getSnapshot();
+          const result = submitScore(defaultBeatmap.id, {
+            score: final.score,
+            accuracy: final.accuracy,
+            maxCombo: final.maxCombo,
+          });
+          setRecord(result);
+          setBest(result.best);
+          setUiPhase('end');
+        },
       });
       configuredRef.current = true;
     }
+    setRecord(null);
     tracker.resetHands();
     audio.setBpm(defaultBeatmap.bpm);
-    audio.startTransport();
-    engine.start(defaultBeatmap);
+    // La musique donne le t=0 : les cibles tombent sur la grille du morceau.
+    const startAt = audio.startMusic();
+    engine.start(defaultBeatmap, startAt);
     setUiPhase('playing');
   }, []);
 
@@ -57,6 +76,7 @@ export function App(): JSX.Element {
     setError(null);
     try {
       await audio.init();
+      await audio.loadTrack(assets.musicUrl);
       await tracker.loadModel(setStatus);
       await tracker.startCamera(setStatus);
       setStatus('Pret.');
@@ -82,6 +102,7 @@ export function App(): JSX.Element {
       if (key === 'r' && tracker.cameraReady) startRun();
       if (key === 'm') settings.METRONOME_ON = !settings.METRONOME_ON;
       if (key === 'd') settings.DEBUG = !settings.DEBUG;
+      if (key === 's') settings.SHOW_SKELETON = !settings.SHOW_SKELETON;
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -89,7 +110,7 @@ export function App(): JSX.Element {
 
   /* Coupe la musique quand la partie se termine. */
   useEffect(() => {
-    if (uiPhase === 'end') audio.stopTransport();
+    if (uiPhase === 'end') audio.stopMusic();
   }, [uiPhase]);
 
   /* Bac a sable console : window.fingertune.settings.PINCH_ON_RATIO = 0.35 */
@@ -107,13 +128,16 @@ export function App(): JSX.Element {
           beatmapTitle={defaultBeatmap.title}
           status={status}
           loading={loading}
+          best={best}
           onStart={() => void handleStart()}
         />
       )}
       {uiPhase === 'error' && error && (
         <ErrorScreen message={error.message} detail={error.detail} onRetry={handleRetry} />
       )}
-      {uiPhase === 'end' && <EndScreen snapshot={snapshot} onReplay={startRun} />}
+      {uiPhase === 'end' && (
+        <EndScreen snapshot={snapshot} record={record} onReplay={startRun} />
+      )}
     </div>
   );
 }

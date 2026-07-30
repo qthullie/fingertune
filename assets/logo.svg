@@ -1,40 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="256" height="256" shape-rendering="crispEdges">
-  <!-- fingertune pixel pinch — original artwork, MIT licensed with the project -->
-  <!-- palette -->
-  <!-- skin: #f2b183 | skin light: #ffd0ae | skin shade: #cf8b63 -->
-  <!-- approach ring: #ff5edb | spark: #4dd8ff | spark core: #ffffff -->
+  <!-- fingertune sprite: an approach ring closing on a target — original artwork, MIT licensed with the project -->
+  <!-- palette: ring #ff5edb | target #4dd8ff | highlight #ffffff -->
 
-  <!-- approach ring (open on the left: the fingers come in through the gap) -->
-  <rect x="7" y="3" width="3" height="1" fill="#ff5edb"/>
-  <rect x="10" y="4" width="1" height="1" fill="#ff5edb"/>
-  <rect x="11" y="5" width="1" height="1" fill="#ff5edb"/>
-  <rect x="12" y="6" width="1" height="4" fill="#ff5edb"/>
-  <rect x="11" y="10" width="1" height="1" fill="#ff5edb"/>
-  <rect x="10" y="11" width="1" height="1" fill="#ff5edb"/>
-  <rect x="7" y="12" width="3" height="1" fill="#ff5edb"/>
+  <!-- approach ring -->
+  <rect x="6" y="0" width="4" height="1" fill="#ff5edb"/>
+  <rect x="4" y="1" width="2" height="1" fill="#ff5edb"/>
+  <rect x="10" y="1" width="2" height="1" fill="#ff5edb"/>
+  <rect x="3" y="2" width="1" height="1" fill="#ff5edb"/>
+  <rect x="12" y="2" width="1" height="1" fill="#ff5edb"/>
+  <rect x="2" y="3" width="1" height="1" fill="#ff5edb"/>
+  <rect x="13" y="3" width="1" height="1" fill="#ff5edb"/>
+  <rect x="1" y="4" width="1" height="2" fill="#ff5edb"/>
+  <rect x="14" y="4" width="1" height="2" fill="#ff5edb"/>
+  <rect x="0" y="6" width="1" height="4" fill="#ff5edb"/>
+  <rect x="15" y="6" width="1" height="4" fill="#ff5edb"/>
+  <rect x="1" y="10" width="1" height="2" fill="#ff5edb"/>
+  <rect x="14" y="10" width="1" height="2" fill="#ff5edb"/>
+  <rect x="2" y="12" width="1" height="1" fill="#ff5edb"/>
+  <rect x="13" y="12" width="1" height="1" fill="#ff5edb"/>
+  <rect x="3" y="13" width="1" height="1" fill="#ff5edb"/>
+  <rect x="12" y="13" width="1" height="1" fill="#ff5edb"/>
+  <rect x="4" y="14" width="2" height="1" fill="#ff5edb"/>
+  <rect x="10" y="14" width="2" height="1" fill="#ff5edb"/>
+  <rect x="6" y="15" width="4" height="1" fill="#ff5edb"/>
 
-  <!-- index finger, coming down from the top-left -->
-  <rect x="1" y="2" width="4" height="1" fill="#ffd0ae"/>
-  <rect x="2" y="3" width="4" height="1" fill="#f2b183"/>
-  <rect x="3" y="4" width="3" height="1" fill="#f2b183"/>
-  <rect x="4" y="5" width="3" height="1" fill="#f2b183"/>
-  <rect x="6" y="6" width="1" height="1" fill="#f2b183"/>
-  <rect x="1" y="3" width="1" height="1" fill="#cf8b63"/>
-  <rect x="3" y="5" width="1" height="1" fill="#cf8b63"/>
+  <!-- target -->
+  <rect x="6" y="5" width="4" height="1" fill="#4dd8ff"/>
+  <rect x="5" y="6" width="6" height="4" fill="#4dd8ff"/>
+  <rect x="6" y="10" width="4" height="1" fill="#4dd8ff"/>
 
-  <!-- thumb, coming up from the bottom-left -->
-  <rect x="1" y="13" width="4" height="1" fill="#cf8b63"/>
-  <rect x="2" y="12" width="4" height="1" fill="#f2b183"/>
-  <rect x="3" y="11" width="3" height="1" fill="#f2b183"/>
-  <rect x="4" y="10" width="3" height="1" fill="#f2b183"/>
-  <rect x="6" y="9" width="1" height="1" fill="#f2b183"/>
-  <rect x="1" y="12" width="1" height="1" fill="#ffd0ae"/>
-  <rect x="3" y="10" width="1" height="1" fill="#ffd0ae"/>
-
-  <!-- the hit spark, caught between the fingertips -->
-  <rect x="8" y="6" width="2" height="1" fill="#4dd8ff"/>
-  <rect x="7" y="7" width="1" height="2" fill="#4dd8ff"/>
-  <rect x="10" y="7" width="1" height="2" fill="#4dd8ff"/>
-  <rect x="8" y="9" width="2" height="1" fill="#4dd8ff"/>
-  <rect x="8" y="7" width="2" height="2" fill="#ffffff"/>
+  <!-- highlight -->
+  <rect x="6" y="6" width="2" height="1" fill="#ffffff"/>
+  <rect x="6" y="7" width="1" height="1" fill="#ffffff"/>
 </svg>

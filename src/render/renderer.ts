@@ -7,7 +7,7 @@
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import type { GameEngine } from '../game/engine';
-import type { HandState } from '../lib/handTracking';
+import { HAND_CONNECTIONS, LANDMARK_COUNT, type HandState } from '../lib/handTracking';
 import { radiusPx, toScreen, type View } from './view';
 
 export interface RenderInput {
@@ -61,8 +61,9 @@ function drawTargets({ ctx, view, engine }: RenderInput): void {
 
   for (const target of visible) {
     const p = toScreen(view, target);
-    const age = now - (target.t - settings.APPROACH_TIME); // 0 -> APPROACH_TIME
-    const progress = Math.min(age / settings.APPROACH_TIME, 1.35);
+    // Le temps d'approche est celui de la phase de la note (phase 1 tres lente).
+    const age = now - (target.t - target.approach); // 0 -> target.approach
+    const progress = Math.min(age / target.approach, 1.35);
     const alpha = Math.min(age / settings.FADE_IN, 1);
     if (alpha <= 0) continue;
 
@@ -152,9 +153,63 @@ function drawEffects({ ctx, width, height, view, engine }: RenderInput): void {
 
 /* ------------------------------------------------------------------ mains ---- */
 
+/** Couleur d'accent par main : slot 0 cyan, slot 1 magenta. */
+function handAccent(hand: HandState): string {
+  return hand.id === 0 ? '#4dd8ff' : '#ff5edb';
+}
+
+/**
+ * Squelette complet : 21 landmarks relies par HAND_CONNECTIONS.
+ * Rendu en deux passes (trait sombre epais puis trait clair) pour rester lisible
+ * sur n'importe quel fond video.
+ */
+function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState): void {
+  const points = hand.landmarks;
+  if (points.length < LANDMARK_COUNT) return;
+
+  const screen = points.map((p) => toScreen(view, p));
+  const accent = handAccent(hand);
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const pass of [0, 1]) {
+    ctx.strokeStyle = pass === 0 ? 'rgba(6,6,14,0.55)' : accent;
+    ctx.lineWidth = pass === 0 ? 6 : 2.5;
+    ctx.globalAlpha = pass === 0 ? 1 : 0.85;
+    ctx.beginPath();
+    for (const [a, b] of HAND_CONNECTIONS) {
+      const pa = screen[a];
+      const pb = screen[b];
+      if (!pa || !pb) continue;
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+    }
+    ctx.stroke();
+  }
+
+  // Articulations. Les bouts de doigts sont un peu plus gros.
+  ctx.globalAlpha = 1;
+  const tips = new Set([4, 8, 12, 16, 20]);
+  for (let i = 0; i < screen.length; i++) {
+    const p = screen[i];
+    if (!p) continue;
+    ctx.fillStyle = tips.has(i) ? accent : 'rgba(255,255,255,0.85)';
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, tips.has(i) ? 4 : 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawHands({ ctx, view, hands }: RenderInput): void {
   for (const hand of hands) {
     if (!hand.visible || !hand.thumb || !hand.index || !hand.pinchPos) continue;
+
+    // Squelette d'abord : il passe sous les reperes de pincement.
+    if (settings.SHOW_SKELETON) drawSkeleton(ctx, view, hand);
+
     const thumb = toScreen(view, hand.thumb);
     const index = toScreen(view, hand.index);
     const mid = toScreen(view, hand.pinchPos);
@@ -175,13 +230,9 @@ function drawHands({ ctx, view, hands }: RenderInput): void {
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Bouts des doigts.
-    const tips: Array<[{ x: number; y: number }, string]> = [
-      [thumb, '#ff5edb'],
-      [index, '#4dd8ff'],
-    ];
-    for (const [pt, color] of tips) {
-      ctx.fillStyle = color;
+    // Bouts des doigts, dans la couleur de la main (slot 0 cyan, slot 1 magenta).
+    for (const pt of [thumb, index]) {
+      ctx.fillStyle = handAccent(hand);
       ctx.beginPath();
       ctx.arc(pt.x, pt.y, hand.pinching ? 9 : 7, 0, Math.PI * 2);
       ctx.fill();
@@ -212,9 +263,10 @@ function drawDebug({ ctx, engine, hands, fps }: RenderInput): void {
     `fps ${fps.toFixed(0)}   t ${engine.time.toFixed(2)}s`,
     ...hands.map(
       (h) =>
-        `main${h.id} ${h.visible ? 'OK' : '--'} ratio ${h.ratio.toFixed(3)} ` +
-        `${h.pinching ? '[PINCE]' : ''}`,
+        `main${h.id} ${h.visible ? 'OK' : '--'} ${(h.handedness ?? '?').padEnd(5)} ` +
+        `ratio ${h.ratio.toFixed(3)} ${h.pinching ? '[PINCE]' : ''}`,
     ),
+    `phase ${engine.currentPhaseIndex + 1}`,
     `seuils on<${settings.PINCH_ON_RATIO} off>${settings.PINCH_OFF_RATIO}`,
     `cibles actives ${engine.activeTargets().length}  effets ${engine.effects.items.length}`,
   ];

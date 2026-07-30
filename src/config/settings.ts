@@ -24,7 +24,8 @@ export interface Settings {
   TARGET_RADIUS: number;
   /** Tolerance spatiale du hit = rayon visuel x ce facteur. */
   HIT_RADIUS_SCALE: number;
-  /** Duree (s) du cercle d'approche avant l'instant du hit. */
+  /** Duree (s) du cercle d'approche. Valeur de repli : chaque phase de beatmap
+   *  definit la sienne (voir BeatmapPhase.approachTime). */
   APPROACH_TIME: number;
   /** Rayon initial du cercle d'approche, en multiples du rayon cible. */
   APPROACH_START: number;
@@ -51,7 +52,7 @@ export interface Settings {
   OEF_D_CUTOFF: number;
 
   /* ---- Hand tracking -------------------------------------------------------------- */
-  /** 1 suffit pour jouer ; 2 est gere par tout le reste du code. */
+  /** Nombre de mains suivies. 2 = jeu a deux mains (les accords l'exigent). */
   MAX_HANDS: number;
   MIN_DETECTION_CONF: number;
   MIN_PRESENCE_CONF: number;
@@ -60,12 +61,18 @@ export interface Settings {
   HAND_LOST_TIMEOUT: number;
 
   /* ---- Divers --------------------------------------------------------------------- */
+  /** Dessine le squelette complet de la main (21 landmarks + connexions). Touche S. */
+  SHOW_SKELETON: boolean;
+  /** Duree (s) d'affichage de la banniere de phase. */
+  PHASE_BANNER_DURATION: number;
   /** Decompte (s) avant la premiere note. */
   COUNTDOWN: number;
   /** Metronome audible (touche M en jeu). */
   METRONOME_ON: boolean;
   /** Volume general en dB. */
   MASTER_VOLUME: number;
+  /** Volume de la musique perso (VITE_MUSIC_URL) en dB. */
+  MUSIC_VOLUME: number;
   /** Overlay de debug tracking (touche D en jeu). */
   DEBUG: boolean;
 }
@@ -93,15 +100,18 @@ export const settings: Settings = {
   OEF_BETA: 0.02,
   OEF_D_CUTOFF: 1.0,
 
-  MAX_HANDS: 1,
+  MAX_HANDS: 2,
   MIN_DETECTION_CONF: 0.5,
   MIN_PRESENCE_CONF: 0.5,
   MIN_TRACKING_CONF: 0.5,
   HAND_LOST_TIMEOUT: 0.5,
 
+  SHOW_SKELETON: true,
+  PHASE_BANNER_DURATION: 3.0,
   COUNTDOWN: 3.0,
   METRONOME_ON: false,
   MASTER_VOLUME: -6,
+  MUSIC_VOLUME: -8,
   DEBUG: false,
 };
 
@@ -120,6 +130,14 @@ export const assets = {
   modelUrl:
     import.meta.env.VITE_HAND_MODEL_URL ??
     'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
+  /**
+   * Musique du morceau. Vide par defaut : la piste est GENEREE par Tone.js
+   * (aucun asset, aucun droit a gerer, et elle suit les phases).
+   * Depose ton fichier dans public/music/ et mets
+   *   VITE_MUSIC_URL=./music/mon-morceau.mp3
+   * dans .env.local pour jouer dessus. Cale alors les `t` de ta beatmap sur lui.
+   */
+  musicUrl: import.meta.env.VITE_MUSIC_URL,
 } as const;
 
 /** Couleurs des grades, partagees par le canvas et le HUD. */

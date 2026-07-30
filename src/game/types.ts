@@ -14,11 +14,30 @@ export interface BeatmapNote {
   t: number;
 }
 
+/**
+ * Une phase de difficulte. Une beatmap en enchaine plusieurs : la premiere est
+ * tres lente (le temps de lire la cible et de caler son pincement), les
+ * suivantes resserrent le cercle d'approche.
+ */
+export interface BeatmapPhase {
+  id: string;
+  /** Affiche en banniere au debut de la phase. */
+  name: string;
+  /** Sous-titre court (ce que la phase demande au joueur). */
+  hint: string;
+  /** Debut de la phase, en secondes de beatmap (avant le decompte). */
+  start: number;
+  /** Duree du cercle d'approche pour les notes de cette phase, en secondes. */
+  approachTime: number;
+}
+
 export interface Beatmap {
   id: string;
   title: string;
   author: string;
   bpm: number;
+  /** Triees par `start` croissant. La premiere doit demarrer a 0. */
+  phases: BeatmapPhase[];
   notes: BeatmapNote[];
 }
 
@@ -28,6 +47,9 @@ export interface Target extends BeatmapNote {
   hit: boolean;
   dead: boolean;
   grade: Grade | null;
+  /** Duree du cercle d'approche, heritee de la phase de la note. */
+  approach: number;
+  phaseIndex: number;
 }
 
 /** Point 2D normalise dans la zone video. */
@@ -54,4 +76,13 @@ export interface GameSnapshot {
   duration: number;
   /** Au moins une main suivie actuellement. */
   handVisible: boolean;
+  /** Nombre de mains suivies (0, 1 ou 2). */
+  handCount: number;
+  /** Phase courante de la beatmap. */
+  phaseIndex: number;
+  phaseCount: number;
+  phaseName: string;
+  phaseHint: string;
+  /** Incremente a chaque changement de phase : sert de `key` pour la banniere. */
+  phaseEventId: number;
 }

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-ssr/
+# Intermediaire du build single-file ; le resultat versionne est standalone/fingertune.html
+dist-standalone/
 *.local
 .env
 .env.local

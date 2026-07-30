@@ -9,7 +9,7 @@
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import { EffectSystem } from './effects';
-import type { Beatmap, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
+import type { Beatmap, BeatmapPhase, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
 import { screenDistance } from '../render/view';
 import type { View } from '../render/view';
 
@@ -36,10 +36,17 @@ export class GameEngine {
   private lastOffsetMs = 0;
   private eventId = 0;
   private handVisible = false;
+  private handCount = 0;
+  private phaseIndex = 0;
+  private phaseEventId = 0;
+  /** Phases decalees du decompte, pretes a comparer a `time`. */
+  private phases: BeatmapPhase[] = [];
 
   private t0 = 0;
   private clock: () => number = () => performance.now() / 1000;
   private onHitSound: ((grade: Exclude<Grade, 'MISS'>, combo: number) => void) | null = null;
+  private onMissSound: ((brokeCombo: boolean) => void) | null = null;
+  private onPhaseChange: ((index: number, phase: BeatmapPhase | undefined) => void) | null = null;
   private onFinish: (() => void) | null = null;
 
   private listeners = new Set<Listener>();
@@ -56,8 +63,15 @@ export class GameEngine {
   getSnapshot = (): GameSnapshot => this.snapshotCache;
 
   private buildSnapshot(): GameSnapshot {
+    const current = this.phases[this.phaseIndex];
     return {
       phase: this.phase,
+      phaseIndex: this.phaseIndex,
+      phaseCount: this.phases.length,
+      phaseName: current?.name ?? '',
+      phaseHint: current?.hint ?? '',
+      phaseEventId: this.phaseEventId,
+      handCount: this.handCount,
       score: this.score,
       combo: this.combo,
       maxCombo: this.maxCombo,
@@ -80,39 +94,63 @@ export class GameEngine {
 
   /* ------------------------------------------------------------------- cablage */
 
-  /** Branche l'horloge audio et les callbacks son / fin de partie. */
+  /** Branche l'horloge audio et les callbacks son / phase / fin de partie. */
   configure(options: {
     clock: () => number;
     onHitSound: (grade: Exclude<Grade, 'MISS'>, combo: number) => void;
+    onMissSound: (brokeCombo: boolean) => void;
+    onPhaseChange: (index: number, phase: BeatmapPhase | undefined) => void;
     onFinish: () => void;
   }): void {
     this.clock = options.clock;
     this.onHitSound = options.onHitSound;
+    this.onMissSound = options.onMissSound;
+    this.onPhaseChange = options.onPhaseChange;
     this.onFinish = options.onFinish;
   }
 
-  setHandVisible(visible: boolean): void {
-    if (visible !== this.handVisible) {
-      this.handVisible = visible;
+  /** Nombre de mains suivies, remonte par la boucle de rendu. */
+  setHandCount(count: number): void {
+    if (count !== this.handCount) {
+      this.handCount = count;
+      this.handVisible = count > 0;
       this.snapshotDirty = true;
     }
   }
 
   /* --------------------------------------------------------------------- cycle */
 
-  /** Charge une beatmap et demarre une partie. */
-  start(beatmap: Beatmap): void {
+  /**
+   * Charge une beatmap et demarre une partie.
+   *
+   * @param startAt instant (horloge audio) du t=0 de la partie. Permet de caler
+   *                le depart de la musique et celui des cibles sur le meme
+   *                echantillon audio. Par defaut : maintenant.
+   */
+  start(beatmap: Beatmap, startAt?: number): void {
     this.beatmap = beatmap;
-    this.targets = beatmap.notes.map((note, i) => ({
-      id: i,
-      x: note.x,
-      y: note.y,
+
+    // Les phases sont decalees du decompte, comme les notes.
+    this.phases = beatmap.phases
+      .map((p) => ({ ...p, start: p.start + settings.COUNTDOWN }))
+      .sort((a, b) => a.start - b.start);
+
+    this.targets = beatmap.notes.map((note, i) => {
       // Toute la map est decalee apres le decompte.
-      t: note.t + settings.COUNTDOWN,
-      hit: false,
-      dead: false,
-      grade: null,
-    }));
+      const t = note.t + settings.COUNTDOWN;
+      const phaseIndex = this.phaseIndexAt(t);
+      return {
+        id: i,
+        x: note.x,
+        y: note.y,
+        t,
+        hit: false,
+        dead: false,
+        grade: null,
+        approach: this.phases[phaseIndex]?.approachTime ?? settings.APPROACH_TIME,
+        phaseIndex,
+      };
+    });
     this.duration = (this.targets.at(-1)?.t ?? 0) + 2;
     this.effects.clear();
     this.score = 0;
@@ -124,8 +162,21 @@ export class GameEngine {
     this.lastOffsetMs = 0;
     this.time = 0;
     this.phase = 'playing';
-    this.t0 = this.clock();
+    this.phaseIndex = 0;
+    this.phaseEventId += 1;
+    this.t0 = startAt ?? this.clock();
     this.publish();
+    this.onPhaseChange?.(0, this.phases[0]);
+  }
+
+  /** Index de la phase active a l'instant `t` (temps de jeu, decompte inclus). */
+  private phaseIndexAt(t: number): number {
+    let index = 0;
+    for (let i = 0; i < this.phases.length; i++) {
+      const phase = this.phases[i];
+      if (phase && t >= phase.start) index = i;
+    }
+    return index;
   }
 
   get currentBeatmap(): Beatmap | null {
@@ -154,14 +205,15 @@ export class GameEngine {
     return this.combo;
   }
 
-  /** Cibles actuellement affichees / jugeables. */
+  get currentPhaseIndex(): number {
+    return this.phaseIndex;
+  }
+
+  /** Cibles actuellement affichees / jugeables (fenetre d'approche propre a la phase). */
   activeTargets(): Target[] {
     const now = this.time;
     return this.targets.filter(
-      (o) =>
-        !o.dead &&
-        now >= o.t - settings.APPROACH_TIME &&
-        now <= o.t + settings.WINDOW_GOOD,
+      (o) => !o.dead && now >= o.t - o.approach && now <= o.t + settings.WINDOW_GOOD,
     );
   }
 
@@ -177,6 +229,15 @@ export class GameEngine {
     }
 
     this.time = this.clock() - this.t0;
+
+    // Changement de phase : banniere + montee d'intensite musicale.
+    const phaseIndex = this.phaseIndexAt(this.time);
+    if (phaseIndex !== this.phaseIndex) {
+      this.phaseIndex = phaseIndex;
+      this.phaseEventId += 1;
+      this.snapshotDirty = true;
+      this.onPhaseChange?.(phaseIndex, this.phases[phaseIndex]);
+    }
 
     for (const target of this.targets) {
       if (!target.dead && this.time > target.t + settings.WINDOW_GOOD) {
@@ -240,8 +301,11 @@ export class GameEngine {
     this.eventId += 1;
 
     if (grade === 'MISS') {
+      // Comme sur Osu! : un rate s'entend. Le son est plus fort si un combo tombe.
+      const brokeCombo = this.combo > 0;
       this.combo = 0;
       this.effects.miss(target, GRADE_STYLE.MISS.color);
+      this.onMissSound?.(brokeCombo);
     } else {
       const style = GRADE_STYLE[grade];
       const multiplier = 1 + Math.min(this.combo, settings.COMBO_CAP) * settings.COMBO_BONUS;

@@ -71,7 +71,7 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
     // 1. Tracking. L'horloge de lissage suit le temps de jeu quand on joue.
     const tSec = engine.phase === 'playing' ? engine.time : nowMs / 1000;
     tracker.detect(tSec, nowMs);
-    engine.setHandVisible(tracker.anyHandVisible);
+    engine.setHandCount(tracker.visibleHandCount);
 
     // 2. Entrees : un hit par transition relache -> actif.
     for (const hand of tracker.hands) {

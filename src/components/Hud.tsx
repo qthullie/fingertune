@@ -52,6 +52,24 @@ export function Hud({ snapshot }: Props): JSX.Element | null {
         <div className="hud-warning">Main non detectee — montre ta main a la camera</div>
       )}
 
+      {/* Banniere de phase : rejouee a chaque changement grace a la key. */}
+      {snapshot.phaseName && (
+        <div className="hud-phase-banner" key={`phase-${snapshot.phaseEventId}`}>
+          <div className="hud-phase-name">{snapshot.phaseName}</div>
+          <div className="hud-phase-hint">{snapshot.phaseHint}</div>
+        </div>
+      )}
+
+      <div className="hud-status">
+        <span>
+          Phase {snapshot.phaseIndex + 1}/{snapshot.phaseCount}
+        </span>
+        <span className={snapshot.handCount >= 2 ? 'hud-hands--duo' : undefined}>
+          {snapshot.handCount} main{snapshot.handCount > 1 ? 's' : ''} suivie
+          {snapshot.handCount > 1 ? 's' : ''}
+        </span>
+      </div>
+
       {countdownLeft > 0 && (
         <div className="hud-countdown" key={`cd-${countdownLeft}`}>
           <div className="hud-countdown-number">{countdownLeft}</div>
