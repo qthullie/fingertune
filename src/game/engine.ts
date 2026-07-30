@@ -12,6 +12,13 @@ import { GRADE_STYLE, settings } from '../config/settings';
 import { EffectSystem } from './effects';
 import type { Beatmap, BeatmapPhase, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
 import { pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
+import { pointAt, prepareSliderPath, sliderProgress } from './slider';
+
+/** A cursor reported by the render loop, in CSS pixels. */
+export interface CursorInput {
+  position: Vec2;
+  pinching: boolean;
+}
 
 /** How coarsely time is republished in the snapshot (seconds). */
 const TIME_QUANTUM = 0.05;
@@ -46,6 +53,7 @@ export class GameEngine {
   private clock: () => number = () => performance.now() / 1000;
   private onHitSound: ((grade: Exclude<Grade, 'MISS'>, combo: number) => void) | null = null;
   private onMissSound: ((brokeCombo: boolean) => void) | null = null;
+  private onSliderTick: (() => void) | null = null;
   private onPhaseChange: ((index: number, phase: BeatmapPhase | undefined) => void) | null = null;
   private onFinish: (() => void) | null = null;
 
@@ -99,12 +107,14 @@ export class GameEngine {
     clock: () => number;
     onHitSound: (grade: Exclude<Grade, 'MISS'>, combo: number) => void;
     onMissSound: (brokeCombo: boolean) => void;
+    onSliderTick: () => void;
     onPhaseChange: (index: number, phase: BeatmapPhase | undefined) => void;
     onFinish: () => void;
   }): void {
     this.clock = options.clock;
     this.onHitSound = options.onHitSound;
     this.onMissSound = options.onMissSound;
+    this.onSliderTick = options.onSliderTick;
     this.onPhaseChange = options.onPhaseChange;
     this.onFinish = options.onFinish;
   }
@@ -140,8 +150,13 @@ export class GameEngine {
       const phaseIndex = this.phaseIndexAt(t);
       const phase = this.phases[phaseIndex];
       const windowScale = phase?.hitWindowScale ?? 1;
+      const kind = note.kind ?? 'circle';
+      // Head first, then the rest of the polyline.
+      const path = prepareSliderPath([{ x: note.x, y: note.y }, ...(note.path ?? [])]);
+
       return {
         id: i,
+        kind,
         x: note.x,
         y: note.y,
         t,
@@ -154,10 +169,20 @@ export class GameEngine {
         goodWindow: settings.WINDOW_GOOD * windowScale,
         radius: settings.TARGET_RADIUS * (phase?.targetScale ?? 1),
         phaseIndex,
+
+        points: path.points,
+        cumulative: path.cumulative,
+        pathLength: path.length,
+        duration: kind === 'slider' ? (note.duration ?? 1) : 0,
+        sliderState: 'pending' as const,
+        heldTime: 0,
+        lastTickAt: -1,
+        broke: false,
       };
     });
 
-    this.duration = (this.targets.at(-1)?.t ?? 0) + 2;
+    const last = this.targets.at(-1);
+    this.duration = (last ? last.t + last.duration : 0) + 2;
     this.effects.clear();
     this.score = 0;
     this.combo = 0;
@@ -219,7 +244,10 @@ export class GameEngine {
   activeTargets(): Target[] {
     const now = this.time;
     return this.targets.filter(
-      (target) => !target.dead && now >= target.t - target.approach && now <= target.t + target.goodWindow,
+      (target) =>
+        !target.dead &&
+        now >= target.t - target.approach &&
+        now <= target.t + target.duration + target.goodWindow,
     );
   }
 
@@ -253,8 +281,21 @@ export class GameEngine {
     }
 
     for (const target of this.targets) {
-      if (!target.dead && this.time > target.t + target.goodWindow) {
+      if (target.dead) continue;
+
+      // Head never hit: a miss, for a circle and for a slider alike.
+      if (target.sliderState === 'pending' && this.time > target.t + target.goodWindow) {
         this.judge(target, 'MISS');
+        continue;
+      }
+
+      // Slider that reached its end: judge the body on how much was followed.
+      if (
+        target.kind === 'slider' &&
+        (target.sliderState === 'holding' || target.sliderState === 'dropped') &&
+        this.time > target.t + target.duration
+      ) {
+        this.judgeSliderBody(target);
       }
     }
     this.effects.update(dt);
@@ -283,6 +324,8 @@ export class GameEngine {
     let bestDelta = Number.POSITIVE_INFINITY;
 
     for (const target of this.activeTargets()) {
+      // Only heads are hittable; a slider already grabbed is handled by tracking.
+      if (target.sliderState !== 'pending') continue;
       // Hit radius follows the phase: easy targets are bigger.
       const hitRadius = radiusPx(playfield, target.radius) * settings.HIT_RADIUS_SCALE;
       if (pixelDistance(cursorPx, toScreen(playfield, target)) > hitRadius) continue;
@@ -305,6 +348,74 @@ export class GameEngine {
   }
 
   /**
+   * Per-frame slider tracking: keeps held sliders held.
+   *
+   * A slider stays "holding" while at least one cursor is BOTH pinching and
+   * inside the follow circle around the moving ball. The follow circle is
+   * deliberately larger than the head (SLIDER_FOLLOW_SCALE): grabbing is meant
+   * to be precise, staying grabbed is not.
+   *
+   * Dropping does not end the slider — you can catch it again, exactly like
+   * Osu!. It costs the combo once, and the time spent off the ball, which is
+   * what the final grade is computed from.
+   *
+   * Call once per frame, after advanceClock() and before update().
+   */
+  trackSliders(cursors: readonly CursorInput[], playfield: Playfield, dt: number): void {
+    if (this.phase !== 'playing') return;
+    const now = this.time;
+
+    for (const target of this.targets) {
+      if (target.kind !== 'slider' || target.dead) continue;
+      if (target.sliderState !== 'holding' && target.sliderState !== 'dropped') continue;
+      if (now < target.t || now > target.t + target.duration) continue;
+
+      const progress = sliderProgress(target, now);
+      const ballPx = toScreen(playfield, pointAt(target, progress));
+      const followRadius = radiusPx(playfield, target.radius) * settings.SLIDER_FOLLOW_SCALE;
+
+      const following = cursors.some(
+        (cursor) => cursor.pinching && pixelDistance(cursor.position, ballPx) <= followRadius,
+      );
+
+      if (following) {
+        target.sliderState = 'holding';
+        target.heldTime += dt;
+
+        // Tick feedback while following: the slider should feel alive.
+        if (now - target.lastTickAt >= settings.SLIDER_TICK_INTERVAL) {
+          target.lastTickAt = now;
+          this.onSliderTick?.();
+          this.effects.sliderTick(pointAt(target, progress));
+        }
+      } else if (target.sliderState === 'holding') {
+        // Just lost it: slider break.
+        target.sliderState = 'dropped';
+        if (!target.broke) {
+          target.broke = true;
+          this.combo = 0;
+          this.onMissSound?.(true);
+          this.snapshotDirty = true;
+        }
+      }
+    }
+  }
+
+  /** Judges a slider body from the fraction of it that was actually followed. */
+  private judgeSliderBody(target: Target): void {
+    const ratio = target.duration > 0 ? target.heldTime / target.duration : 0;
+    const grade: Grade =
+      ratio >= settings.SLIDER_PERFECT_RATIO
+        ? 'PERFECT'
+        : ratio >= settings.SLIDER_GOOD_RATIO
+          ? 'GOOD'
+          : 'MISS';
+    target.sliderState = 'done';
+    // Judged at the tail, so the burst appears where the ball ended.
+    this.judge(target, grade, pointAt(target, 1));
+  }
+
+  /**
    * A pinch was recognised but hit nothing. No penalty: just a marker, so you
    * can tell at a glance whether the gesture was recognised at all.
    */
@@ -315,10 +426,28 @@ export class GameEngine {
     });
   }
 
-  private judge(target: Target, grade: Grade): void {
+  /**
+   * Records a judgement.
+   *
+   * A slider head keeps the target alive: the body is judged separately when the
+   * ball reaches the end, so one slider yields two judgements, like Osu!.
+   *
+   * @param at where to spawn the effects (the tail, for a slider body).
+   */
+  private judge(target: Target, grade: Grade, at: Vec2 = target): void {
+    const isSliderHead = target.kind === 'slider' && target.sliderState === 'pending';
+    const startsSlider = isSliderHead && grade !== 'MISS';
+
     target.hit = grade !== 'MISS';
-    target.dead = true;
     target.grade = grade;
+    // A grabbed slider stays on screen until its tail.
+    target.dead = !startsSlider;
+    if (startsSlider) {
+      target.sliderState = 'holding';
+      target.lastTickAt = this.time;
+    } else if (target.kind === 'slider' && grade === 'MISS' && isSliderHead) {
+      target.sliderState = 'done';
+    }
 
     this.counts[grade] += 1;
     this.lastGrade = grade;
@@ -330,7 +459,7 @@ export class GameEngine {
       // Like Osu!: a miss is audible, and louder when it breaks a streak.
       const brokeCombo = this.combo > 0;
       this.combo = 0;
-      this.effects.miss(target, GRADE_STYLE.MISS.color);
+      this.effects.miss(at, GRADE_STYLE.MISS.color);
       this.onMissSound?.(brokeCombo);
     } else {
       const style = GRADE_STYLE[grade];
@@ -338,7 +467,7 @@ export class GameEngine {
       this.score += Math.round(style.score() * multiplier);
       this.combo += 1;
       this.maxCombo = Math.max(this.maxCombo, this.combo);
-      this.effects.burst(target, style.color, grade === 'PERFECT' ? 26 : 14);
+      this.effects.burst(at, style.color, grade === 'PERFECT' ? 26 : 14);
       this.effects.flash(style.color, grade === 'PERFECT' ? 0.28 : 0.16);
       this.onHitSound?.(grade, this.combo);
     }

@@ -35,6 +35,17 @@ export interface Settings {
   /** Inner margin of the playfield (fraction of its size), so no target hugs an edge. */
   PLAYFIELD_PADDING: number;
 
+  /* ---- Sliders (hold the pinch and follow the ball) ------------------------------ */
+  /** Follow-circle radius = target radius x this. Bigger than the head: once you
+   *  are holding, the game should be generous about staying on the ball. */
+  SLIDER_FOLLOW_SCALE: number;
+  /** Seconds between two tick sounds while following. */
+  SLIDER_TICK_INTERVAL: number;
+  /** Followed fraction needed for a PERFECT on the slider body. */
+  SLIDER_PERFECT_RATIO: number;
+  /** Followed fraction needed for a GOOD. Below it, the body is a MISS. */
+  SLIDER_GOOD_RATIO: number;
+
   /* ---- Timing windows (seconds, on |now - t|) ------------------------------------ */
   WINDOW_PERFECT: number;
   WINDOW_GOOD: number;
@@ -93,6 +104,11 @@ export const settings: Settings = {
   APPROACH_START: 3.2,
   FADE_IN: 0.25,
   PLAYFIELD_PADDING: 0.04,
+
+  SLIDER_FOLLOW_SCALE: 2.2,
+  SLIDER_TICK_INTERVAL: 0.22,
+  SLIDER_PERFECT_RATIO: 0.85,
+  SLIDER_GOOD_RATIO: 0.5,
 
   WINDOW_PERFECT: 0.06,
   WINDOW_GOOD: 0.12,

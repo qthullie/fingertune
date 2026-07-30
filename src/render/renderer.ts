@@ -7,6 +7,8 @@
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import type { GameEngine } from '../game/engine';
+import { directionAt, pointAt, sliderProgress } from '../game/slider';
+import type { Target } from '../game/types';
 import { HAND_CONNECTIONS, LANDMARK_COUNT, type HandState } from '../lib/handTracking';
 import { radiusPx, toScreen, type Playfield, type View } from './view';
 
@@ -67,6 +69,121 @@ function drawPlayfield({ ctx, playfield }: RenderInput): void {
 
 /* ---------------------------------------------------------------- targets ---- */
 
+/**
+ * Slider body: the path to follow, its direction, and the ball.
+ *
+ * Drawn under the head so the note to grab stays the most visible thing. The
+ * body turns green while the pinch is being held on the ball, and dims once the
+ * ball has gone past.
+ */
+function drawSlider(
+  ctx: CanvasRenderingContext2D,
+  playfield: Playfield,
+  target: Target,
+  now: number,
+  rTarget: number,
+): void {
+  if (target.points.length < 2) return;
+
+  const screen = target.points.map((point) => toScreen(playfield, point));
+  const first = screen[0];
+  if (!first) return;
+
+  const started = now >= target.t;
+  const holding = target.sliderState === 'holding';
+  const dropped = target.sliderState === 'dropped';
+
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+
+  // Track: a dark casing plus a coloured core, so it reads over any background.
+  const trace = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(first.x, first.y);
+    for (let i = 1; i < screen.length; i++) {
+      const point = screen[i];
+      if (point) ctx.lineTo(point.x, point.y);
+    }
+  };
+
+  trace();
+  ctx.strokeStyle = 'rgba(6,6,14,0.55)';
+  ctx.lineWidth = rTarget * 2 + 8;
+  ctx.stroke();
+
+  trace();
+  ctx.strokeStyle = holding
+    ? 'rgba(77,255,176,0.30)'
+    : dropped
+      ? 'rgba(255,85,102,0.22)'
+      : 'rgba(142,162,255,0.22)';
+  ctx.lineWidth = rTarget * 2;
+  ctx.stroke();
+
+  trace();
+  ctx.strokeStyle = holding ? 'rgba(77,255,176,0.85)' : 'rgba(142,162,255,0.55)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Direction arrows: which way to drag. Spaced along the path, not per segment,
+  // so the spacing stays even on an uneven polyline.
+  const arrowCount = Math.max(2, Math.round(target.pathLength * 14));
+  for (let i = 1; i <= arrowCount; i++) {
+    const progress = i / (arrowCount + 1);
+    const at = toScreen(playfield, pointAt(target, progress));
+    const dir = directionAt(target, progress);
+    const size = Math.min(rTarget * 0.42, 14);
+
+    ctx.save();
+    ctx.translate(at.x, at.y);
+    ctx.rotate(Math.atan2(dir.y, dir.x));
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(-size * 0.5, -size * 0.55);
+    ctx.lineTo(size * 0.5, 0);
+    ctx.lineTo(-size * 0.5, size * 0.55);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Tail marker.
+  const tail = screen[screen.length - 1];
+  if (tail) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(tail.x, tail.y, rTarget * 0.75, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // The ball, once the slider is running.
+  if (started) {
+    const progress = sliderProgress(target, now);
+    const ball = toScreen(playfield, pointAt(target, progress));
+
+    // Follow circle: shows how much slack you have while holding.
+    if (holding || dropped) {
+      ctx.strokeStyle = holding ? 'rgba(77,255,176,0.75)' : 'rgba(255,85,102,0.6)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, rTarget * settings.SLIDER_FOLLOW_SCALE, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = holding ? '#4dffb0' : '#ffffff';
+    ctx.shadowColor = holding ? '#4dffb0' : 'transparent';
+    ctx.shadowBlur = holding ? 20 : 0;
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, rTarget * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.restore();
+}
+
 function drawTargets({ ctx, playfield, engine }: RenderInput): void {
   const now = engine.time;
 
@@ -84,6 +201,15 @@ function drawTargets({ ctx, playfield, engine }: RenderInput): void {
 
     ctx.save();
     ctx.globalAlpha = alpha;
+
+    // Slider body first: the head is drawn on top of it.
+    if (target.kind === 'slider') drawSlider(ctx, playfield, target, now, rTarget);
+
+    // Once a slider is grabbed, its head is done; only the body still matters.
+    if (target.kind === 'slider' && target.sliderState !== 'pending') {
+      ctx.restore();
+      continue;
+    }
 
     // Disc
     const gradient = ctx.createRadialGradient(p.x, p.y, rTarget * 0.15, p.x, p.y, rTarget);

@@ -44,6 +44,7 @@ export function App(): JSX.Element {
         clock: () => audio.now(),
         onHitSound: (grade, combo) => audio.playHit(grade, combo),
         onMissSound: (brokeCombo) => audio.playMiss(brokeCombo),
+        onSliderTick: () => audio.playSliderTick(),
         // The soundtrack steps up on every phase.
         onPhaseChange: (index) => audio.setIntensity(index),
         onFinish: () => {

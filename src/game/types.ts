@@ -4,14 +4,32 @@ export type Grade = 'PERFECT' | 'GOOD' | 'MISS';
 
 export type GamePhase = 'idle' | 'playing' | 'finished';
 
+/**
+ * What a note asks for.
+ *  - `circle`: pinch once, on the beat.
+ *  - `slider`: pinch on the head, then HOLD the pinch and follow the ball along
+ *    the path, in the direction it travels, until the end.
+ */
+export type NoteKind = 'circle' | 'slider';
+
 /** A beatmap note. x and y are normalised 0..1 inside the playfield. */
 export interface BeatmapNote {
   /** 0 = left edge of the playfield (already mirrored), 1 = right edge. */
   x: number;
   /** 0 = top, 1 = bottom. */
   y: number;
-  /** Hit instant, in seconds from the start of the track. */
+  /** Hit instant, in seconds from the start of the track. For a slider: its head. */
   t: number;
+  /** Defaults to 'circle'. */
+  kind?: NoteKind;
+  /**
+   * Slider path, as a polyline in playfield coordinates. The head (x, y) is
+   * implicit as the first point; list the rest here. The ball reaches the last
+   * point at t + duration.
+   */
+  path?: ReadonlyArray<Vec2>;
+  /** Slider travel time, in seconds. */
+  duration?: number;
 }
 
 /**
@@ -47,9 +65,21 @@ export interface Beatmap {
   notes: BeatmapNote[];
 }
 
+/** How a slider is doing, once its head has been hit. */
+export type SliderState =
+  /** Head not hit yet. */
+  | 'pending'
+  /** Head hit, the pinch is being held on the ball. */
+  | 'holding'
+  /** The pinch was released or drifted off the ball; can be picked back up. */
+  | 'dropped'
+  /** Finished (judged). */
+  | 'done';
+
 /** A note instantiated for a run. */
 export interface Target extends BeatmapNote {
   id: number;
+  kind: NoteKind;
   hit: boolean;
   dead: boolean;
   grade: Grade | null;
@@ -61,6 +91,23 @@ export interface Target extends BeatmapNote {
   /** Effective radius (fraction of the playfield's smaller side). */
   radius: number;
   phaseIndex: number;
+
+  /* ---- Sliders only ---------------------------------------------------- */
+  /** Full polyline, head included, in playfield coordinates. */
+  points: Vec2[];
+  /** Cumulative length of each point along the path (normalised units). */
+  cumulative: number[];
+  /** Total path length. */
+  pathLength: number;
+  /** Travel time in seconds (0 for a circle). */
+  duration: number;
+  sliderState: SliderState;
+  /** Seconds the ball was actually followed. */
+  heldTime: number;
+  /** Game time of the last tick sound. */
+  lastTickAt: number;
+  /** True once the hold was lost at least once (a slider break). */
+  broke: boolean;
 }
 
 /** A normalised 2D point. */

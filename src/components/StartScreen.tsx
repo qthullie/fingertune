@@ -42,6 +42,10 @@ export function StartScreen({ beatmapTitle, status, loading, best, onStart }: Pr
           A hit is going from <b>fingers apart</b> to <b>fingers pinched</b> on the target.
         </li>
         <li>
+          <b>Sliders</b>: pinch the head, then <b>keep pinching</b> and drag along the track,
+          following the ball in the direction of the arrows, all the way to the end.
+        </li>
+        <li>
           Three phases: <b>Easy</b> (very slow, very forgiving), <b>Medium</b>, then <b>Hard</b>.
           The soundtrack grows with them.
         </li>

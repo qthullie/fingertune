@@ -37,6 +37,32 @@ function path(
   return points.map(([x, y], i) => ({ x, y, t: at(startBeat + i * step) }));
 }
 
+/**
+ * A slider: pinch the head, hold, and follow the ball along the polyline.
+ *
+ * @param startBeat when the head must be hit
+ * @param points    head first, then the rest of the path
+ * @param beats     travel time, in beats
+ */
+function slider(
+  startBeat: number,
+  points: ReadonlyArray<readonly [number, number]>,
+  beats: number,
+): BeatmapNote[] {
+  const [head, ...rest] = points;
+  if (!head) return [];
+  return [
+    {
+      x: head[0],
+      y: head[1],
+      t: at(startBeat),
+      kind: 'slider',
+      path: rest.map(([x, y]) => ({ x, y })),
+      duration: beats * BEAT,
+    },
+  ];
+}
+
 /** `count` notes around a circle (flattened vertically to fit the playfield). */
 function ring(
   startBeat: number,
@@ -60,24 +86,61 @@ function ring(
 /* -------------------------------------------------------------------------- */
 /* Phase 1 — Easy: one note every 6 beats (3 s), near the centre.              */
 /* -------------------------------------------------------------------------- */
-const easy: BeatmapNote[] = path(
-  0,
-  [
-    [0.5, 0.5],
-    [0.38, 0.5],
-    [0.62, 0.5],
-    [0.38, 0.38],
-    [0.62, 0.38],
-    [0.35, 0.62],
-    [0.65, 0.62],
-    [0.5, 0.35],
-    [0.3, 0.48],
-    [0.7, 0.48],
-    [0.5, 0.65],
-    [0.5, 0.42],
-  ],
-  6,
-);
+const easy: BeatmapNote[] = [
+  ...path(
+    0,
+    [
+      [0.5, 0.5],
+      [0.38, 0.5],
+      [0.62, 0.5],
+      [0.38, 0.38],
+      [0.62, 0.38],
+    ],
+    6,
+  ),
+
+  // First slider: slow, straight, left to right. Four beats to cross it.
+  ...slider(
+    30,
+    [
+      [0.3, 0.5],
+      [0.7, 0.5],
+    ],
+    4,
+  ),
+
+  ...path(
+    36,
+    [
+      [0.35, 0.62],
+      [0.65, 0.62],
+      [0.5, 0.35],
+    ],
+    6,
+  ),
+
+  // Second slider: an L, so the direction has to be read, not guessed.
+  ...slider(
+    54,
+    [
+      [0.68, 0.35],
+      [0.68, 0.62],
+      [0.35, 0.62],
+    ],
+    5,
+  ),
+
+  // Ends at beat 68, leaving a clear beat before Medium takes over at 72.
+  ...path(
+    60,
+    [
+      [0.3, 0.48],
+      [0.7, 0.48],
+      [0.5, 0.62],
+    ],
+    4,
+  ),
+];
 
 /* -------------------------------------------------------------------------- */
 /* Phase 2 — Medium: one note every 2.5 beats (1.25 s), wider reach.           */
@@ -97,20 +160,38 @@ const medium: BeatmapNote[] = [
     ],
     2.5,
   ),
-  ...ring(92, 8, 0.5, 0.5, 0.22, 2.5, -Math.PI / 2),
+  // Diagonal slider, then a zigzag one: the ball changes direction twice.
+  ...slider(
+    92,
+    [
+      [0.28, 0.68],
+      [0.62, 0.34],
+    ],
+    3,
+  ),
+  ...slider(
+    98,
+    [
+      [0.7, 0.34],
+      [0.55, 0.6],
+      [0.38, 0.34],
+      [0.25, 0.58],
+    ],
+    4,
+  ),
+
+  ...ring(106, 8, 0.5, 0.5, 0.22, 2.5, -Math.PI / 2),
+
+  // Four notes to close the phase; it must end before beat 136, where Hard starts.
   ...path(
-    112,
+    127,
     [
       [0.28, 0.68],
       [0.72, 0.68],
       [0.38, 0.3],
       [0.62, 0.3],
-      [0.25, 0.45],
-      [0.75, 0.45],
-      [0.5, 0.6],
-      [0.5, 0.35],
     ],
-    2.5,
+    2,
   ),
 ];
 
@@ -132,12 +213,23 @@ const hard: BeatmapNote[] = [
     1.5,
   ),
 
+  // Fast slider: same shapes as Easy, half the time to travel them.
+  ...slider(
+    146,
+    [
+      [0.32, 0.4],
+      [0.66, 0.4],
+      [0.66, 0.62],
+    ],
+    2.5,
+  ),
+
   // Tight ring, one note every 1.5 beats.
-  ...ring(148, 8, 0.5, 0.5, 0.18, 1.5, -Math.PI / 2),
+  ...ring(152, 8, 0.5, 0.5, 0.18, 1.5, -Math.PI / 2),
 
   // Staircase up, then down.
   ...path(
-    162,
+    165,
     [
       [0.3, 0.68],
       [0.4, 0.58],
@@ -153,7 +245,7 @@ const hard: BeatmapNote[] = [
 
   // Final burst, every 1.5 beats, small hops.
   ...path(
-    176,
+    178,
     [
       [0.35, 0.45],
       [0.5, 0.38],
@@ -165,6 +257,18 @@ const hard: BeatmapNote[] = [
       [0.5, 0.5],
     ],
     1.5,
+  ),
+
+  // Closing slider: a long S to hold all the way through.
+  ...slider(
+    192,
+    [
+      [0.28, 0.42],
+      [0.45, 0.62],
+      [0.62, 0.38],
+      [0.75, 0.55],
+    ],
+    5,
   ),
 ];
 

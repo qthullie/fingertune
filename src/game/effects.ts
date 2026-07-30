@@ -68,6 +68,25 @@ export class EffectSystem {
     });
   }
 
+  /** Small spark dropped along a slider while it is being followed. */
+  sliderTick(at: Vec2): void {
+    for (let i = 0; i < 3; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.04 + Math.random() * 0.1;
+      this.items.push({
+        kind: 'particle',
+        x: at.x,
+        y: at.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        decay: 3.4,
+        color: '#4dffb0',
+        size: 1.5 + Math.random() * 2,
+      });
+    }
+  }
+
   /** Pinch recognised but nothing hit: a small white ring. */
   pinchGhost(at: Vec2): void {
     this.items.push({

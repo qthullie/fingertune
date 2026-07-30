@@ -293,6 +293,12 @@ export class AudioEngine {
     else this.goodSynth?.triggerAttackRelease(note, '32n');
   }
 
+  /** Soft click while a slider is being followed. Quiet: it repeats a lot. */
+  playSliderTick(): void {
+    if (!this.initialized) return;
+    this.goodSynth?.triggerAttackRelease('E6', '64n', undefined, 0.25);
+  }
+
   /** Miss sound. Heavier when it breaks a combo. */
   playMiss(brokeCombo: boolean): void {
     if (!this.initialized) return;

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useAnimationFrame } from '../hooks/useAnimationFrame';
-import type { GameEngine } from '../game/engine';
+import type { CursorInput, GameEngine } from '../game/engine';
 import type { HandTracker } from '../lib/handTracking';
 import { renderFrame } from '../render/renderer';
 import { computeCoverView, computePlayfield, toScreen } from '../render/view';
@@ -19,8 +19,9 @@ interface Props {
  *   1. clock       (GameEngine.advanceClock, audio clock)
  *   2. tracking    (HandTracker.detect)
  *   3. input       (pinch rising edge -> GameEngine.tryHit)
- *   4. logic       (GameEngine.update: misses, effects, end of run)
- *   5. render      (renderFrame)
+ *   4. sliders     (held pinch -> GameEngine.trackSliders)
+ *   5. logic       (GameEngine.update: misses, effects, end of run)
+ *   6. render      (renderFrame)
  *
  * Game timing comes from the audio clock (see GameEngine.configure), not from
  * requestAnimationFrame, so a dropped frame never shifts the beat.
@@ -77,21 +78,30 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
     tracker.detect(tSec, nowMs);
     engine.setHandCount(tracker.visibleHandCount);
 
-    // 3. Input: one hit per released -> active transition. The cursor lives in
-    //    video space, targets in playfield space, so both are compared in pixels.
+    // 3. Input. The cursor lives in video space, targets in playfield space, so
+    //    both are converted to pixels before being compared.
+    const cursors: CursorInput[] = [];
     for (const hand of tracker.hands) {
-      if (!hand.visible || !hand.justPinched || !hand.pinchPos) continue;
+      if (!hand.visible || !hand.pinchPos) continue;
       const cursorPx = toScreen(view, hand.pinchPos);
+      cursors.push({ position: cursorPx, pinching: hand.pinching });
+
+      // One hit per released -> active transition.
+      if (!hand.justPinched) continue;
       const hit = engine.tryHit(cursorPx, playfield);
       // Pinch into thin air: leave a marker, so "not detected" is
       // distinguishable from "detected but off-target or off-beat".
       if (!hit) engine.notePinchMiss(cursorPx, playfield);
     }
 
-    // 4. Logic.
+    // 4. Sliders need the pinch held, so they are tracked every frame, not just
+    //    on the rising edge.
+    engine.trackSliders(cursors, playfield, dt);
+
+    // 5. Logic.
     engine.update(dt);
 
-    // 5. Render.
+    // 6. Render.
     renderFrame({
       ctx,
       width,

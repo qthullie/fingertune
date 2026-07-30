@@ -127,6 +127,13 @@ and a `PINCH_COOLDOWN_MS = 140` guard rejects a second trigger inside one
 gesture. The cursor is the thumb–index midpoint, which stays stable through the
 closing motion.
 
+Sliders use the other half of that state machine: the **held** state. Grabbing a
+slider head is an edge; keeping it is a per-frame test of `pinching` plus
+proximity to the moving ball. That asks something harder of the tracking than a
+tap does — the pinch has to survive translation and rotation of the hand for
+seconds at a time, which is exactly where a fixed low-pass filter would either
+lag behind the drag or let go on jitter.
+
 The edge is also cleared at the start of every detection pass: the webcam runs at
 ~30 fps while the render loop runs at 60, so a flag left standing would be read
 twice and one pinch would consume two targets.
@@ -194,6 +201,8 @@ while you pinch is the fastest way to pick your own numbers.
 | `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones |
 | `SHOW_PINCH_METER` | `true` | live ratio gauge with both thresholds |
 | `SHOW_PLAYFIELD` | `false` | outline the area targets can occupy |
+| `SLIDER_FOLLOW_SCALE` | `2.2` | follow-circle radius: how much slack while dragging |
+| `SLIDER_TICK_INTERVAL` | `0.22 s` | spacing of the tick feedback while following |
 
 Everything is in [`src/config/settings.ts`](src/config/settings.ts) and mutable
 live, without a reload:
@@ -209,11 +218,19 @@ fingertune.settings.DEBUG = true;
 
 Short version, because the pipeline above is the point.
 
-It is an Osu!-style rhythm game: circles appear with a shrinking approach ring,
-you pinch when the ring closes. Hits are graded **Perfect**, **Good** or
-**Miss**, with a combo and weighted accuracy. The demo chart runs in three
-difficulty phases, and each one scales the ring speed, the timing windows *and*
-the target size:
+It is an Osu!-style rhythm game with two note types:
+
+- **circles** — pinch once, as the approach ring closes on the target;
+- **sliders** — pinch the head, then *keep pinching* and drag along the track,
+  following the ball in the direction of the arrows. Ticks sound while you
+  follow. Letting go mid-way is a slider break: it costs the combo, and you can
+  grab it again, but the body is graded on the fraction you actually followed
+  (`SLIDER_PERFECT_RATIO` 0.85, `SLIDER_GOOD_RATIO` 0.5). One slider therefore
+  produces two judgements, head and body, like Osu!.
+
+Hits are graded **Perfect**, **Good** or **Miss**, with a combo and weighted
+accuracy. The demo chart runs in three difficulty phases, and each one scales the
+ring speed, the timing windows *and* the target size:
 
 | Phase | Approach ring | Timing windows | Targets | Pace |
 | --- | --- | --- | --- | --- |
@@ -225,9 +242,10 @@ The soundtrack is synthesised by Tone.js on the same transport and grows with
 each phase; misses are audible; the best score per beatmap is kept in
 `localStorage`.
 
-Charts are plain data — `{ x, y, t }` notes plus phase definitions — in
-[`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()` and
-`ring()` helpers. Add yours and register it in
+Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
+`duration` for sliders) and phase definitions — in
+[`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
+and `slider()` helpers. Add yours and register it in
 [`src/beatmaps/index.ts`](src/beatmaps/index.ts). To play on your own music, drop
 a file in `public/music/` and set `VITE_MUSIC_URL`.
 
@@ -269,7 +287,8 @@ src/
     highscores.ts     localStorage best scores
     errors.ts         technical errors → human messages
   config/settings.ts  every knob, mutable at runtime
-  game/               engine (timing windows, score, phases), effects, types
+  game/               engine (timing windows, score, phases), slider geometry,
+                      effects, types
   render/             view + playfield transforms, renderer (video, targets, skeleton)
   components/         GameCanvas (loop), Hud, Start/Error/End screens
   beatmaps/           charts and phase definitions
