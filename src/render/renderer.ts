@@ -27,7 +27,63 @@ export function renderFrame(input: RenderInput): void {
   drawTargets(input);
   drawEffects(input);
   drawHands(input);
+  if (settings.SHOW_PINCH_METER) drawPinchMeter(input);
   if (settings.DEBUG) drawDebug(input);
+}
+
+/**
+ * Jauge de pincement, une par main suivie.
+ *
+ * Montre le ratio courant et les deux seuils d'hysteresis. C'est le diagnostic
+ * le plus direct : si la jauge ne descend jamais sous le seuil bas quand tu
+ * pinces, le probleme est la detection (seuil, lumiere, angle de la main), pas
+ * le jeu.
+ */
+function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
+  const visible = hands.filter((h) => h.visible);
+  if (visible.length === 0) return;
+
+  const barWidth = 132;
+  const barHeight = 8;
+  const x = width - barWidth - 24;
+  let y = height - 34 - (visible.length - 1) * 30;
+
+  for (const hand of visible) {
+    // Le ratio depasse rarement 1.2 ; au-dela l'echelle n'apprend plus rien.
+    const scale = (value: number): number => Math.min(value / 1.2, 1) * barWidth;
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(6,6,14,0.55)';
+    ctx.fillRect(x - 6, y - 16, barWidth + 12, barHeight + 26);
+
+    // Fond + zone "pince" (sous le seuil bas).
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(x, y, barWidth, barHeight);
+    ctx.fillStyle = 'rgba(77,255,176,0.22)';
+    ctx.fillRect(x, y, scale(settings.PINCH_ON_RATIO), barHeight);
+
+    // Ratio courant.
+    ctx.fillStyle = hand.pinching ? '#4dffb0' : '#ffffff';
+    ctx.fillRect(x, y, scale(hand.ratio), barHeight);
+
+    // Les deux seuils.
+    for (const threshold of [settings.PINCH_ON_RATIO, settings.PINCH_OFF_RATIO]) {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillRect(x + scale(threshold) - 1, y - 3, 2, barHeight + 6);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.font = "600 11px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(
+      `main ${hand.id + 1} · ratio ${hand.ratio.toFixed(2)}${hand.pinching ? ' · PINCE' : ''}`,
+      x,
+      y - 4,
+    );
+    ctx.restore();
+    y += 30;
+  }
 }
 
 /* ------------------------------------------------------------------ video ---- */
@@ -54,13 +110,14 @@ function drawVideo({ ctx, width, height, view, video }: RenderInput): void {
 
 function drawTargets({ ctx, view, engine }: RenderInput): void {
   const now = engine.time;
-  const rTarget = radiusPx(view, settings.TARGET_RADIUS);
 
   // Des plus tardives vers les plus proches : la note a jouer est dessinee au-dessus.
   const visible = engine.activeTargets().sort((a, b) => b.t - a.t);
 
   for (const target of visible) {
     const p = toScreen(view, target);
+    // Rayon propre a la phase (les cibles faciles sont plus grosses).
+    const rTarget = radiusPx(view, target.radius);
     // Le temps d'approche est celui de la phase de la note (phase 1 tres lente).
     const age = now - (target.t - target.approach); // 0 -> target.approach
     const progress = Math.min(age / target.approach, 1.35);
@@ -80,7 +137,7 @@ function drawTargets({ ctx, view, engine }: RenderInput): void {
     ctx.fill();
 
     // Anneau : passe au blanc lumineux pendant la fenetre Perfect.
-    const inPerfect = Math.abs(now - target.t) <= settings.WINDOW_PERFECT;
+    const inPerfect = Math.abs(now - target.t) <= target.perfectWindow;
     ctx.lineWidth = inPerfect ? 6 : 4;
     ctx.strokeStyle = inPerfect ? '#ffffff' : '#8ea2ff';
     if (inPerfect) {
@@ -120,6 +177,15 @@ function drawEffects({ ctx, width, height, view, engine }: RenderInput): void {
       ctx.beginPath();
       ctx.arc(p.x, p.y, e.size * e.life, 0, Math.PI * 2);
       ctx.fill();
+    } else if (e.kind === 'ghost') {
+      // Pincement reconnu, rien touche : petit anneau qui se resserre.
+      const r = radiusPx(view, settings.TARGET_RADIUS) * (0.55 + e.life * 0.35);
+      ctx.globalAlpha = Math.max(0, e.life) * 0.65;
+      ctx.strokeStyle = e.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.stroke();
     } else if (e.kind === 'ring') {
       const r = radiusPx(view, settings.TARGET_RADIUS) * (1 + (1 - e.life) * 1.8);
       ctx.strokeStyle = e.color;

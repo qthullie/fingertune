@@ -46,12 +46,17 @@ export function StartScreen({ beatmapTitle, status, loading, best, onStart }: Pr
           <b>Deux mains</b> : la phase 3 envoie des cibles simultanees, une de chaque cote.
         </li>
         <li>
-          Trois phases : <b>tres lent</b>, puis plus rapide, puis les deux mains. La musique
-          monte avec.
+          Trois phases : <b>Facile</b> (tres lent, tres tolerant), <b>Moyen</b>, puis
+          <b> Difficile</b> a deux mains. La musique monte avec.
+        </li>
+        <li>
+          La <b>jauge en bas a droite</b> montre ton ratio de pincement et les seuils : si
+          elle ne descend pas dans la zone verte, c&apos;est la detection qu&apos;il faut
+          regler, pas ton timing.
         </li>
         <li>
           <kbd>R</kbd> rejouer · <kbd>M</kbd> metronome · <kbd>S</kbd> squelette ·{' '}
-          <kbd>D</kbd> debug tracking
+          <kbd>P</kbd> jauge · <kbd>D</kbd> debug tracking
         </li>
       </ul>
 

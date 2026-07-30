@@ -34,6 +34,8 @@ export class AudioEngine {
   private missSynth: Tone.NoiseSynth | null = null;
   private missTone: Tone.Synth | null = null;
   private metroSynth: Tone.MembraneSynth | null = null;
+  private reverbSend: Tone.Reverb | null = null;
+  private reverbBus: Tone.Gain | null = null;
 
   /* Instruments du morceau. */
   private kick: Tone.MembraneSynth | null = null;
@@ -62,7 +64,21 @@ export class AudioEngine {
     await Tone.start();
     Tone.Destination.volume.value = settings.MASTER_VOLUME;
 
-    const reverb = new Tone.Reverb({ decay: 1.4, wet: 0.18 }).toDestination();
+    /*
+     * Bus d'effet en PARALLELE, jamais en serie.
+     *
+     * Tone.Reverb est un convolver dont l'impulse response est generee de facon
+     * asynchrone : tant qu'elle n'existe pas, tout ce qui passe UNIQUEMENT par
+     * lui sort du silence. Les instruments vont donc en direct vers la sortie,
+     * et n'envoient qu'une copie dans la reverb (wet = 1, dose par son volume).
+     */
+    // Le gain dose la quantite de reverb dans le mix (Reverb n'a pas de volume).
+    const reverbBus = new Tone.Gain(0.25).toDestination();
+    const reverb = new Tone.Reverb({ decay: 1.4, wet: 1 }).connect(reverbBus);
+    // On attend l'IR : sans ca, les premieres secondes de jeu sont sans queue.
+    await reverb.generate();
+    this.reverbSend = reverb;
+    this.reverbBus = reverbBus;
 
     /* ---- Retours de jeu -------------------------------------------------- */
 
@@ -70,15 +86,17 @@ export class AudioEngine {
     this.perfectSynth = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.12 },
-    }).connect(reverb);
-    this.perfectSynth.volume.value = -4;
+    }).toDestination();
+    this.perfectSynth.connect(reverb);
+    this.perfectSynth.volume.value = -2;
 
     // Hit "Good" : plus sourd, plus discret.
     this.goodSynth = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'sine' },
       envelope: { attack: 0.002, decay: 0.11, sustain: 0, release: 0.08 },
-    }).connect(reverb);
-    this.goodSynth.volume.value = -8;
+    }).toDestination();
+    this.goodSynth.connect(reverb);
+    this.goodSynth.volume.value = -6;
 
     // Miss : souffle sec + chute de hauteur. Volontairement desagreable.
     this.missSynth = new Tone.NoiseSynth({
@@ -112,6 +130,11 @@ export class AudioEngine {
     this.initialized = true;
   }
 
+  /** Bip de verification : confirme a l'oreille que la sortie audio fonctionne. */
+  playTestBlip(): void {
+    this.metroSynth?.triggerAttackRelease('C4', '16n');
+  }
+
   /** Construit les instruments du morceau et la boucle de sequencage. */
   private buildMusic(reverb: Tone.Reverb): void {
     this.kick = new Tone.MembraneSynth({
@@ -141,17 +164,20 @@ export class AudioEngine {
     }).toDestination();
     this.bass.volume.value = -14;
 
+    // Comme les sons de jeu : sortie directe + copie dans la reverb.
     this.lead = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.005, decay: 0.2, sustain: 0.05, release: 0.2 },
-    }).connect(reverb);
-    this.lead.volume.value = -20;
+    }).toDestination();
+    this.lead.connect(reverb);
+    this.lead.volume.value = -18;
 
     this.pad = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'sine' },
       envelope: { attack: 0.6, decay: 0.4, sustain: 0.5, release: 1.2 },
-    }).connect(reverb);
-    this.pad.volume.value = -26;
+    }).toDestination();
+    this.pad.connect(reverb);
+    this.pad.volume.value = -22;
 
     // Une croche a la fois : l'arrangement lit `this.intensity` pour savoir quels
     // instruments jouent. Changer de phase change donc le morceau sans le couper.
@@ -229,6 +255,10 @@ export class AudioEngine {
     Tone.Transport.stop();
     Tone.Transport.cancel();
     Tone.Transport.position = 0;
+    // stop() avant start() : sur un relance (touche R) les Loops sont deja en
+    // etat "started" et un start() seul ne les reprogrammerait pas apres cancel().
+    this.musicPart?.stop(0);
+    this.metroLoop?.stop(0);
     this.musicPart?.start(0);
     this.metroLoop?.start(0);
 
@@ -287,6 +317,8 @@ export class AudioEngine {
       this.missSynth,
       this.missTone,
       this.metroSynth,
+      this.reverbSend,
+      this.reverbBus,
       this.kick,
       this.snare,
       this.hat,

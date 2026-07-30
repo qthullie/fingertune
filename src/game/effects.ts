@@ -5,7 +5,7 @@
 
 import type { Vec2 } from './types';
 
-export type EffectKind = 'particle' | 'ring' | 'miss';
+export type EffectKind = 'particle' | 'ring' | 'miss' | 'ghost';
 
 export interface Effect extends Vec2 {
   kind: EffectKind;
@@ -64,6 +64,21 @@ export class EffectSystem {
       life: 1,
       decay: 1.6,
       color,
+      size: 1,
+    });
+  }
+
+  /** Pincement reconnu mais qui n'a touche aucune cible : anneau blanc discret. */
+  pinchGhost(at: Vec2): void {
+    this.items.push({
+      kind: 'ghost',
+      x: at.x,
+      y: at.y,
+      vx: 0,
+      vy: 0,
+      life: 1,
+      decay: 3.2,
+      color: 'rgba(255,255,255,0.9)',
       size: 1,
     });
   }

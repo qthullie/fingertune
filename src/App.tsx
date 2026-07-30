@@ -76,6 +76,9 @@ export function App(): JSX.Element {
     setError(null);
     try {
       await audio.init();
+      // Bip immediat : si tu ne l'entends pas, le probleme est la sortie audio
+      // (onglet coupe, volume systeme), pas le jeu.
+      audio.playTestBlip();
       await audio.loadTrack(assets.musicUrl);
       await tracker.loadModel(setStatus);
       await tracker.startCamera(setStatus);
@@ -103,6 +106,7 @@ export function App(): JSX.Element {
       if (key === 'm') settings.METRONOME_ON = !settings.METRONOME_ON;
       if (key === 'd') settings.DEBUG = !settings.DEBUG;
       if (key === 's') settings.SHOW_SKELETON = !settings.SHOW_SKELETON;
+      if (key === 'p') settings.SHOW_PINCH_METER = !settings.SHOW_PINCH_METER;
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

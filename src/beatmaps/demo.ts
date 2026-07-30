@@ -194,25 +194,33 @@ const phase3: BeatmapNote[] = [
  */
 const phases: BeatmapPhase[] = [
   {
-    id: 'warmup',
-    name: 'Phase 1 — Echauffement',
-    hint: 'Tres lent. Prends le temps de viser, pince quand le cercle se referme.',
+    id: 'easy',
+    name: 'Phase 1 — Facile',
+    hint: 'Tres lent, cibles larges, timing tres tolerant. Pince quand le cercle se referme.',
     start: 0,
     approachTime: 2.6,
+    // 3x plus indulgent (Perfect 180 ms, Good 360 ms) et cibles 40 % plus grosses :
+    // en facile, c'est le geste qu'on apprend, pas le timing.
+    hitWindowScale: 3,
+    targetScale: 1.4,
   },
   {
-    id: 'buildup',
-    name: 'Phase 2 — Montee',
+    id: 'medium',
+    name: 'Phase 2 — Moyen',
     hint: 'Ca accelere. Utilise tes deux mains pour couvrir les deux cotes.',
     start: at(72) - 2.5,
     approachTime: 1.6,
+    hitWindowScale: 1.8,
+    targetScale: 1.15,
   },
   {
-    id: 'duo',
-    name: 'Phase 3 — Les deux mains',
+    id: 'hard',
+    name: 'Phase 3 — Difficile',
     hint: 'Cibles simultanees : une main de chaque cote, en meme temps.',
     start: at(136) - 2.5,
     approachTime: 1.0,
+    hitWindowScale: 1,
+    targetScale: 1,
   },
 ];
 

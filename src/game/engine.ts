@@ -139,6 +139,8 @@ export class GameEngine {
       // Toute la map est decalee apres le decompte.
       const t = note.t + settings.COUNTDOWN;
       const phaseIndex = this.phaseIndexAt(t);
+      const phase = this.phases[phaseIndex];
+      const windowScale = phase?.hitWindowScale ?? 1;
       return {
         id: i,
         x: note.x,
@@ -147,7 +149,11 @@ export class GameEngine {
         hit: false,
         dead: false,
         grade: null,
-        approach: this.phases[phaseIndex]?.approachTime ?? settings.APPROACH_TIME,
+        // Vitesse, indulgence et taille : les trois leviers de difficulte.
+        approach: phase?.approachTime ?? settings.APPROACH_TIME,
+        perfectWindow: settings.WINDOW_PERFECT * windowScale,
+        goodWindow: settings.WINDOW_GOOD * windowScale,
+        radius: settings.TARGET_RADIUS * (phase?.targetScale ?? 1),
         phaseIndex,
       };
     });
@@ -213,12 +219,21 @@ export class GameEngine {
   activeTargets(): Target[] {
     const now = this.time;
     return this.targets.filter(
-      (o) => !o.dead && now >= o.t - o.approach && now <= o.t + settings.WINDOW_GOOD,
+      (o) => !o.dead && now >= o.t - o.approach && now <= o.t + o.goodWindow,
     );
   }
 
   /**
-   * Avance l'horloge, transforme en Miss les cibles depassees, fait vieillir les effets.
+   * Lit l'horloge audio. A appeler EN DEBUT de frame, avant la detection et les
+   * entrees : sinon un hit est juge avec le temps de la frame precedente, soit
+   * ~16 ms d'erreur sur une fenetre Perfect qui n'en fait que 60.
+   */
+  advanceClock(): void {
+    if (this.phase === 'playing') this.time = this.clock() - this.t0;
+  }
+
+  /**
+   * Transforme en Miss les cibles depassees, fait vieillir les effets, publie.
    * @param dt secondes de rendu ecoulees (pour les particules uniquement).
    */
   update(dt: number): void {
@@ -227,8 +242,6 @@ export class GameEngine {
       if (this.snapshotDirty) this.publish();
       return;
     }
-
-    this.time = this.clock() - this.t0;
 
     // Changement de phase : banniere + montee d'intensite musicale.
     const phaseIndex = this.phaseIndexAt(this.time);
@@ -240,7 +253,7 @@ export class GameEngine {
     }
 
     for (const target of this.targets) {
-      if (!target.dead && this.time > target.t + settings.WINDOW_GOOD) {
+      if (!target.dead && this.time > target.t + target.goodWindow) {
         this.judge(target, 'MISS');
       }
     }
@@ -262,11 +275,12 @@ export class GameEngine {
   tryHit(pos: Vec2, view: View): boolean {
     if (this.phase !== 'playing') return false;
 
-    const hitRadius = settings.TARGET_RADIUS * settings.HIT_RADIUS_SCALE * view.minSide;
     let best: Target | null = null;
     let bestDelta = Number.POSITIVE_INFINITY;
 
     for (const target of this.activeTargets()) {
+      // Le rayon de hit suit la phase : les cibles faciles sont plus grosses.
+      const hitRadius = target.radius * settings.HIT_RADIUS_SCALE * view.minSide;
       if (screenDistance(view, pos, target) > hitRadius) continue;
       const delta = Math.abs(this.time - target.t);
       if (delta < bestDelta) {
@@ -277,16 +291,20 @@ export class GameEngine {
     if (!best) return false;
 
     const grade: Grade | null =
-      bestDelta <= settings.WINDOW_PERFECT
-        ? 'PERFECT'
-        : bestDelta <= settings.WINDOW_GOOD
-          ? 'GOOD'
-          : null;
+      bestDelta <= best.perfectWindow ? 'PERFECT' : bestDelta <= best.goodWindow ? 'GOOD' : null;
     // Hors fenetre : pincement ignore, aucune penalite (comme un clic dans le vide).
     if (!grade) return false;
 
     this.judge(best, grade);
     return true;
+  }
+
+  /**
+   * Pincement detecte mais qui n'a rien touche. Aucune penalite : juste un
+   * marqueur visuel, pour voir d'un coup d'oeil si le geste a ete reconnu.
+   */
+  notePinchMiss(pos: Vec2): void {
+    this.effects.pinchGhost(pos);
   }
 
   private judge(target: Target, grade: Grade): void {

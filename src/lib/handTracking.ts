@@ -268,6 +268,12 @@ export class HandTracker {
   detect(tSec: number, nowMs: number): void {
     const video = this.video;
     if (!video || !this.landmarker || video.videoWidth === 0) return;
+
+    // `justPinched` est un front, valable UNE frame de rendu. La webcam tourne a
+    // ~30 fps et la boucle a 60 : sans cet effacement, l'evenement resterait vrai
+    // sur la frame suivante et un seul pincement declencherait deux hits.
+    for (const hand of this.hands) hand.justPinched = false;
+
     if (video.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = video.currentTime;
 

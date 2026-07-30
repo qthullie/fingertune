@@ -118,14 +118,24 @@ boundary would flicker between states on noise alone, firing phantom hits:
 
 | Current state | Condition | Result |
 | --- | --- | --- |
-| released | `ratio < PINCH_ON_RATIO` (0.42) | → **pinched**, emit `justPinched` |
-| pinched | `ratio > PINCH_OFF_RATIO` (0.62) | → released |
-| pinched | `0.42 ≤ ratio ≤ 0.62` | stay pinched (dead band) |
+| released | `ratio < PINCH_ON_RATIO` (0.45) | → **pinched**, emit `justPinched` |
+| pinched | `ratio > PINCH_OFF_RATIO` (0.65) | → released |
+| pinched | `0.45 ≤ ratio ≤ 0.65` | stay pinched (dead band) |
 
 A hit is only ever triggered by the **rising edge**, never by the steady state,
 and a `PINCH_COOLDOWN_MS = 140` guard rejects a second trigger inside one
 gesture. The cursor is the thumb–index midpoint, which stays stable through the
 closing motion.
+
+The edge is also cleared at the start of every detection pass: the webcam runs at
+~30 fps while the render loop runs at 60, so a flag left standing would be read
+twice and one pinch would consume two targets.
+
+An always-on meter (bottom right, <kbd>P</kbd> to hide) shows the live ratio
+against both thresholds — the fastest way to tell "the gesture was not
+recognised" apart from "recognised, but off-target or off-beat". A pinch that
+hits nothing draws a small white ring at the cursor, so a recognised-but-missed
+gesture is still visible.
 
 ### 4. Two hands, stable identities
 
@@ -170,8 +180,8 @@ while you pinch is the fastest way to pick your own numbers.
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| `PINCH_ON_RATIO` | `0.42` | activation threshold — lower it if hits fire before you close |
-| `PINCH_OFF_RATIO` | `0.62` | release threshold — widen the gap if the state flickers |
+| `PINCH_ON_RATIO` | `0.45` | activation threshold — lower it if hits fire before you close |
+| `PINCH_OFF_RATIO` | `0.65` | release threshold — widen the gap if the state flickers |
 | `PINCH_COOLDOWN_MS` | `140` | minimum delay between two triggers |
 | `OEF_MIN_CUTOFF` | `1.7` | lower = smoother cursor, more lag |
 | `OEF_BETA` | `0.02` | higher = snappier on fast moves, more jitter |
@@ -179,6 +189,7 @@ while you pinch is the fastest way to pick your own numbers.
 | `MIN_DETECTION_CONF` / `MIN_TRACKING_CONF` | `0.5` | MediaPipe confidence gates |
 | `HAND_LOST_TIMEOUT` | `0.5 s` | grace period before a hand is forgotten |
 | `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones |
+| `SHOW_PINCH_METER` | `true` | live ratio gauge with both thresholds |
 
 Everything is in [`src/config/settings.ts`](src/config/settings.ts) and mutable
 live, without a reload:
@@ -195,12 +206,20 @@ fingertune.settings.DEBUG = true;
 Short version, because the pipeline above is the point.
 
 It is an Osu!-style rhythm game: circles appear with a shrinking approach ring,
-you pinch when the ring closes. Hits are graded **Perfect** (< 60 ms), **Good**
-(< 120 ms) or **Miss**, with a combo and weighted accuracy. The demo chart runs
-in three phases — a very slow warm-up (2.6 s approach rings), a faster build-up,
-then simultaneous two-handed chords. The soundtrack is synthesised by Tone.js on
-the same transport and grows with each phase; misses are audible; the best score
-per beatmap is kept in `localStorage`.
+you pinch when the ring closes. Hits are graded **Perfect**, **Good** or
+**Miss**, with a combo and weighted accuracy. The demo chart runs in three
+difficulty phases, and each one scales the ring speed, the timing windows *and*
+the target size:
+
+| Phase | Approach ring | Timing windows | Targets | Pace |
+| --- | --- | --- | --- | --- |
+| Facile | 2.6 s | ×3 (Perfect 180 ms) | ×1.4 | one note every 3 s |
+| Moyen | 1.6 s | ×1.8 | ×1.15 | one note every 1.25 s |
+| Difficile | 1.0 s | ×1 (Perfect 60 ms) | ×1 | chords, both hands |
+
+The soundtrack is synthesised by Tone.js on the same transport and grows with
+each phase; misses are audible; the best score per beatmap is kept in
+`localStorage`.
 
 Charts are plain data — `{ x, y, t }` notes plus phase definitions — in
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`

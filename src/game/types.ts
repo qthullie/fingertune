@@ -29,6 +29,14 @@ export interface BeatmapPhase {
   start: number;
   /** Duree du cercle d'approche pour les notes de cette phase, en secondes. */
   approachTime: number;
+  /**
+   * Multiplicateur des fenetres de timing (Perfect / Good). 2 = deux fois plus
+   * indulgent. C'est ce qui fait la difference facile / moyen / difficile,
+   * autant que la vitesse.
+   */
+  hitWindowScale: number;
+  /** Multiplicateur du rayon des cibles (et donc de la tolerance spatiale). */
+  targetScale: number;
 }
 
 export interface Beatmap {
@@ -49,6 +57,11 @@ export interface Target extends BeatmapNote {
   grade: Grade | null;
   /** Duree du cercle d'approche, heritee de la phase de la note. */
   approach: number;
+  /** Fenetres de timing effectives (secondes), heritees de la phase. */
+  perfectWindow: number;
+  goodWindow: number;
+  /** Rayon effectif (fraction du plus petit cote), herite de la phase. */
+  radius: number;
   phaseIndex: number;
 }
 

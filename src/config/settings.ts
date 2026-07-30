@@ -63,6 +63,8 @@ export interface Settings {
   /* ---- Divers --------------------------------------------------------------------- */
   /** Dessine le squelette complet de la main (21 landmarks + connexions). Touche S. */
   SHOW_SKELETON: boolean;
+  /** Jauge de pincement (ratio + seuils) en bas a droite. Touche P. */
+  SHOW_PINCH_METER: boolean;
   /** Duree (s) d'affichage de la banniere de phase. */
   PHASE_BANNER_DURATION: number;
   /** Decompte (s) avant la premiere note. */
@@ -78,8 +80,8 @@ export interface Settings {
 }
 
 export const settings: Settings = {
-  PINCH_ON_RATIO: 0.42,
-  PINCH_OFF_RATIO: 0.62,
+  PINCH_ON_RATIO: 0.45,
+  PINCH_OFF_RATIO: 0.65,
   PINCH_COOLDOWN_MS: 140,
 
   TARGET_RADIUS: 0.075,
@@ -107,6 +109,7 @@ export const settings: Settings = {
   HAND_LOST_TIMEOUT: 0.5,
 
   SHOW_SKELETON: true,
+  SHOW_PINCH_METER: true,
   PHASE_BANNER_DURATION: 3.0,
   COUNTDOWN: 3.0,
   METRONOME_ON: false,

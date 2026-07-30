@@ -68,19 +68,26 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
     const view = computeCoverView(width, height, video?.videoWidth ?? 0, video?.videoHeight ?? 0);
     viewRef.current = view;
 
-    // 1. Tracking. L'horloge de lissage suit le temps de jeu quand on joue.
+    // 1. Horloge AVANT tout le reste : le hit doit etre juge avec l'instant
+    //    ou le pincement est observe, pas avec celui de la frame precedente.
+    engine.advanceClock();
+
+    // 2. Tracking. L'horloge de lissage suit le temps de jeu quand on joue.
     const tSec = engine.phase === 'playing' ? engine.time : nowMs / 1000;
     tracker.detect(tSec, nowMs);
     engine.setHandCount(tracker.visibleHandCount);
 
-    // 2. Entrees : un hit par transition relache -> actif.
+    // 3. Entrees : un hit par transition relache -> actif.
     for (const hand of tracker.hands) {
       if (hand.visible && hand.justPinched && hand.pinchPos) {
-        engine.tryHit(hand.pinchPos, view);
+        const hit = engine.tryHit(hand.pinchPos, view);
+        // Pincement dans le vide : marqueur discret, pour distinguer "pas
+        // detecte" de "detecte mais a cote / hors tempo".
+        if (!hit) engine.notePinchMiss(hand.pinchPos);
       }
     }
 
-    // 3. Logique.
+    // 4. Logique.
     engine.update(dt);
 
     // 4. Rendu.
