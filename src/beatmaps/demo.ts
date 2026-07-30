@@ -109,8 +109,11 @@ const easy: BeatmapNote[] = [
     4,
   ),
 
+  // Four beats of breathing room after the slider tail: releasing the pinch,
+  // bringing the hand back and re-pinching takes noticeably longer than
+  // tapping two circles in a row.
   ...path(
-    36,
+    38,
     [
       [0.35, 0.62],
       [0.65, 0.62],
@@ -121,7 +124,7 @@ const easy: BeatmapNote[] = [
 
   // Second slider: an L, so the direction has to be read, not guessed.
   ...slider(
-    54,
+    56,
     [
       [0.68, 0.35],
       [0.68, 0.62],
@@ -130,15 +133,14 @@ const easy: BeatmapNote[] = [
     5,
   ),
 
-  // Ends at beat 68, leaving a clear beat before Medium takes over at 72.
+  // Tail at beat 61, next note at 65, and the phase ends before Medium at 72.
   ...path(
-    60,
+    65,
     [
       [0.3, 0.48],
       [0.7, 0.48],
-      [0.5, 0.62],
     ],
-    4,
+    3,
   ),
 ];
 
@@ -170,7 +172,7 @@ const medium: BeatmapNote[] = [
     3,
   ),
   ...slider(
-    98,
+    99,
     [
       [0.7, 0.34],
       [0.55, 0.6],
@@ -180,7 +182,8 @@ const medium: BeatmapNote[] = [
     4,
   ),
 
-  ...ring(106, 8, 0.5, 0.5, 0.22, 2.5, -Math.PI / 2),
+  // Tail at 103; the ring starts 4 beats later.
+  ...ring(107, 8, 0.5, 0.5, 0.22, 2.5, -Math.PI / 2),
 
   // Four notes to close the phase; it must end before beat 136, where Hard starts.
   ...path(
@@ -224,12 +227,12 @@ const hard: BeatmapNote[] = [
     2.5,
   ),
 
-  // Tight ring, one note every 1.5 beats.
-  ...ring(152, 8, 0.5, 0.5, 0.18, 1.5, -Math.PI / 2),
+  // Tail at 148.5. Even at Hard the recovery gets 3 beats.
+  ...ring(153, 8, 0.5, 0.5, 0.18, 1.5, -Math.PI / 2),
 
   // Staircase up, then down.
   ...path(
-    165,
+    166,
     [
       [0.3, 0.68],
       [0.4, 0.58],

@@ -1,10 +1,15 @@
 name: Deploy to GitHub Pages
 
-# Publie le build Vite sur GitHub Pages a chaque push sur main.
-# Prerequis cote repo : Settings > Pages > Source = "GitHub Actions".
+# Manual only, on purpose.
+#
+# GitHub Pages has to be enabled on the repository first, and on the free plan
+# that requires the repository to be public. Running this on every push while
+# Pages is off just produces a red X on every commit ("Get Pages site failed").
+#
+# Once the repository is public: Settings > Pages > Source = "GitHub Actions",
+# then run this workflow from the Actions tab. Switch back to `on: push` if you
+# want every commit deployed.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -24,18 +29,21 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - run: npm ci
 
-      # Heberge le modele avec le site : pas de dependance au CDN Google a l'execution.
+      # Ship the model with the site: no dependency on Google's CDN at runtime.
       - run: npm run fetch:model
       - run: echo "VITE_HAND_MODEL_URL=./models/hand_landmarker.task" >> .env.production
 
       - run: npm run build
 
       - uses: actions/configure-pages@v5
+        with:
+          # Turns Pages on if it is not already, instead of failing.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
