@@ -1,0 +1,25 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.local
+.env.*.local
+
+# Assets generes / telecharges (voir scripts/)
+public/mediapipe/
+public/models/
+
+# Logs & caches
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.vite/
+.eslintcache
+
+# Editeurs / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

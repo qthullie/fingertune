@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Fingertune — jeu de rythme au pincement</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #07070d; color: #e8e8f0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+  /* ---------- Overlays (écran de démarrage / erreurs / fin) ---------- */
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 18px;
+    background: radial-gradient(ellipse at 50% 40%, #171733 0%, #07070d 70%);
+    text-align: center; padding: 24px; z-index: 10;
+  }
+  .overlay.hidden { display: none; }
+  h1 { font-size: clamp(32px, 7vw, 64px); margin: 0; letter-spacing: 2px;
+       background: linear-gradient(90deg, #4dd8ff, #ff5edb); -webkit-background-clip: text;
+       background-clip: text; color: transparent; }
+  p.sub { max-width: 620px; line-height: 1.55; color: #b9b9cf; margin: 0; font-size: 15px; }
+  ul.tips { max-width: 620px; text-align: left; color: #9a9ab5; font-size: 14px; line-height: 1.7; }
+  button {
+    font: inherit; font-size: 18px; font-weight: 600; padding: 14px 30px; border-radius: 999px;
+    border: none; cursor: pointer; color: #06060c;
+    background: linear-gradient(90deg, #4dd8ff, #ff5edb);
+    transition: transform .12s ease, filter .12s ease;
+  }
+  button:hover { transform: translateY(-2px); filter: brightness(1.1); }
+  button:disabled { opacity: .5; cursor: progress; transform: none; }
+  .error { color: #ff7a7a; max-width: 620px; line-height: 1.6; font-size: 15px; }
+  .small { font-size: 13px; color: #7c7c96; }
+  kbd { background:#22223a; border:1px solid #3a3a5c; border-radius:5px; padding:1px 6px; font-size:12px; }
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<!-- Écran de démarrage : le navigateur exige un geste utilisateur pour webcam + audio -->
+<div id="startScreen" class="overlay">
+  <h1>FINGERTUNE</h1>
+  <p class="sub">Jeu de rythme au <b>pincement</b>. Des cercles apparaissent, un cercle
+     d'approche se referme dessus&nbsp;: pince (pouce&nbsp;+&nbsp;index) pile quand il
+     touche la cible.</p>
+  <ul class="tips">
+    <li>Place-toi à ~60–100&nbsp;cm de la webcam, bras visible, fond pas trop chargé.</li>
+    <li>Garde la main <b>de face</b>, paume vers la caméra.</li>
+    <li>Un hit = passer de <b>doigts ouverts</b> à <b>doigts pincés</b> sur la cible.</li>
+    <li><kbd>R</kbd> rejouer · <kbd>M</kbd> métronome · <kbd>D</kbd> debug tracking</li>
+  </ul>
+  <button id="startBtn">Autoriser la webcam / Jouer</button>
+  <p class="small" id="startStatus">Modèle de hand tracking non chargé (~7&nbsp;Mo au 1er lancement).</p>
+</div>
+
+<!-- Écran d'erreur (webcam refusée / absente / modèle KO) -->
+<div id="errorScreen" class="overlay hidden">
+  <h1>Oups</h1>
+  <p class="error" id="errorMsg"></p>
+  <button id="retryBtn">Réessayer</button>
+</div>
+
+<!-- Écran de fin de beatmap -->
+<div id="endScreen" class="overlay hidden">
+  <h1>Fini&nbsp;!</h1>
+  <p class="sub" id="endStats"></p>
+  <button id="replayBtn">Rejouer</button>
+</div>
+
+<!-- Tone.js (audio) : script classique, expose le global `Tone` -->
+<script src="https://cdn.jsdelivr.net/npm/tone@14.8.49/build/Tone.js"></script>
+
+<script type="module">
+/* =====================================================================================
+   FINGERTUNE — jeu de rythme façon Osu! piloté au pincement (MediaPipe Hand Landmarker)
+   Fichier unique, 100 % client. Aucune installation.
+
+   Architecture (dans l'ordre du fichier) :
+     1. CONFIG            — toutes les constantes de réglage
+     2. BEATMAP           — la partition : tableau de { x, y, t }
+     3. Filtre One-Euro   — lissage des landmarks
+     4. Audio (Tone.js)   — sons de hit + métronome
+     5. Hand tracking     — MediaPipe, mapping vidéo→canvas, état de pincement (hystérésis)
+     6. Logique de jeu    — cibles, fenêtres de timing, score/combo, particules
+     7. Rendu             — vidéo miroir, cibles, effets, HUD
+     8. Boucle & bootstrap
+   ===================================================================================== */
+
+import { FilesetResolver, HandLandmarker }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+
+/* =====================================================================================
+   1. CONFIG — TOUS LES RÉGLAGES SONT ICI
+   ===================================================================================== */
+const CONFIG = {
+
+  /* ---- Pincement (hystérésis : deux seuils pour éviter le clignotement) -------------
+     Ratio = distance(pouce[4], index[8]) / distance(poignet[0], base majeur[9]).
+     Normalisé par la taille de la main => robuste à l'éloignement de la webcam.        */
+  PINCH_ON_RATIO:   0.42,   // en dessous  => pincement ACTIF
+  PINCH_OFF_RATIO:  0.62,   // au dessus   => pincement RELÂCHÉ
+  PINCH_COOLDOWN_MS: 140,   // délai mini entre deux déclenchements (anti double-trigger)
+
+  /* ---- Cibles ---------------------------------------------------------------------- */
+  TARGET_RADIUS:      0.075, // rayon cible, en fraction du plus petit côté de la zone vidéo
+  HIT_RADIUS_SCALE:   1.35,  // tolérance spatiale du hit = rayon visuel × ce facteur
+  APPROACH_TIME:      1.10,  // s : durée de vie du cercle d'approche avant l'instant t
+  APPROACH_START:     3.2,   // rayon initial du cercle d'approche (× rayon cible)
+  FADE_IN:            0.25,  // s : apparition en fondu de la cible
+
+  /* ---- Fenêtres de timing (en secondes, sur |now - t|) ----------------------------- */
+  WINDOW_PERFECT: 0.060,     // 60 ms
+  WINDOW_GOOD:    0.120,     // 120 ms
+  // au-delà de WINDOW_GOOD : Miss (ou cible jamais pincée)
+
+  /* ---- Score ----------------------------------------------------------------------- */
+  SCORE_PERFECT: 300,
+  SCORE_GOOD:    100,
+  COMBO_BONUS:   0.02,       // +2 % de score par point de combo (plafonné ci-dessous)
+  COMBO_CAP:     50,
+
+  /* ---- Filtre One-Euro (lissage des positions de doigts) --------------------------
+     MIN_CUTOFF bas  = très lisse mais mou.  BETA haut = plus réactif aux mouvements
+     rapides (moins de lag) mais laisse passer un peu plus de bruit.                    */
+  OEF_MIN_CUTOFF: 1.7,
+  OEF_BETA:       0.02,
+  OEF_D_CUTOFF:   1.0,
+
+  /* ---- Hand tracking ---------------------------------------------------------------- */
+  MAX_HANDS:            1,   // passer à 2 : tout le reste du code gère déjà N mains
+  MIN_DETECTION_CONF:  0.5,
+  MIN_PRESENCE_CONF:   0.5,
+  MIN_TRACKING_CONF:   0.5,
+  HAND_LOST_TIMEOUT:   0.5,  // s sans détection avant d'oublier une main
+
+  /* ---- Divers ------------------------------------------------------------------------ */
+  COUNTDOWN:      3.0,       // s de décompte avant la 1re note
+  METRONOME_ON:   false,     // touche M pour basculer
+  BPM:            120,
+  MASTER_VOLUME: -6,         // dB
+  DEBUG:          false,     // touche D : affiche ratio de pincement, FPS, squelette
+};
+
+
+/* =====================================================================================
+   2. BEATMAP — la partition
+   -------------------------------------------------------------------------------------
+   Format : { x, y, t }
+     x, y : position normalisée 0..1 dans la zone vidéo (0,0 = haut-gauche de l'image
+            telle qu'affichée, déjà en miroir : x=0 est à ta gauche à l'écran).
+     t    : instant du hit, en secondes depuis le début du morceau.
+
+   La beatmap ci-dessous est GÉNÉRÉE par quelques motifs pour rester lisible et facile
+   à retoucher. Tu peux la remplacer intégralement par un tableau littéral :
+     const BEATMAP = [ {x:.3,y:.4,t:2.0}, {x:.7,y:.4,t:2.5}, ... ];
+   ===================================================================================== */
+const BEAT = 60 / CONFIG.BPM;                 // 0.5 s à 120 BPM
+const B = (n) => 2.0 + n * BEAT;              // n-ième temps, décalé de 2 s d'intro
+
+/** Suite de positions le long d'un chemin, une note par temps. */
+function pattern(startBeat, points, step = 1) {
+  return points.map((p, i) => ({ x: p[0], y: p[1], t: B(startBeat + i * step) }));
+}
+/** Cercle de n notes autour de (cx, cy). */
+function circlePattern(startBeat, n, cx, cy, r, step = 1, phase = 0) {
+  return Array.from({ length: n }, (_, i) => {
+    const a = phase + (i / n) * Math.PI * 2;
+    return { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r * 1.25, t: B(startBeat + i * step) };
+  });
+}
+
+const BEATMAP = [
+  // --- Intro : alternance gauche / droite, tempo tranquille (1 note / temps) ---------
+  ...pattern(0,  [[.30,.45],[.70,.45],[.30,.60],[.70,.60],
+                  [.35,.35],[.65,.35],[.50,.55],[.50,.35]], 2),
+
+  // --- Montée : zigzag serré ----------------------------------------------------------
+  ...pattern(16, [[.25,.30],[.45,.55],[.65,.30],[.80,.55],
+                  [.65,.75],[.45,.50],[.25,.70],[.50,.45]], 1.5),
+
+  // --- Couplet : petit cercle horaire -------------------------------------------------
+  ...circlePattern(30, 8, .50, .50, .22, 1, -Math.PI / 2),
+
+  // --- Respiration : notes espacées, grands déplacements -------------------------------
+  ...pattern(40, [[.18,.30],[.82,.30],[.18,.72],[.82,.72],[.50,.50]], 2),
+
+  // --- Pont : escalier montant --------------------------------------------------------
+  ...pattern(52, [[.22,.75],[.34,.65],[.46,.55],[.58,.45],[.70,.35],[.80,.28]], 1),
+
+  // --- Refrain : cercle inverse plus rapide -------------------------------------------
+  ...circlePattern(60, 8, .50, .50, .28, .75, Math.PI / 2),
+
+  // --- Final : rafale gauche/droite puis note tenue au centre --------------------------
+  ...pattern(68, [[.28,.42],[.72,.42],[.28,.62],[.72,.62],
+                  [.40,.30],[.60,.30],[.40,.70],[.60,.70]], .75),
+  { x: .50, y: .50, t: B(76) },
+].sort((a, b) => a.t - b.t);   // toujours trier par temps
+
+
+/* =====================================================================================
+   3. FILTRE ONE-EURO — lissage réactif des landmarks
+   -------------------------------------------------------------------------------------
+   Principe : passe-bas dont la fréquence de coupure augmente avec la vitesse du signal.
+   Immobile => très lissé (pas de tremblement). Rapide => peu de lag.
+   ===================================================================================== */
+class LowPass {
+  constructor() { this.y = null; }
+  filter(x, alpha) {
+    this.y = (this.y === null) ? x : alpha * x + (1 - alpha) * this.y;
+    return this.y;
+  }
+  get value() { return this.y; }
+}
+
+class OneEuro {
+  constructor(minCutoff, beta, dCutoff) {
+    this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff;
+    this.xF = new LowPass(); this.dxF = new LowPass();
+    this.lastX = null; this.lastT = null;
+  }
+  static alpha(cutoff, dt) {
+    const tau = 1 / (2 * Math.PI * cutoff);
+    return 1 / (1 + tau / dt);
+  }
+  filter(x, t) {
+    if (this.lastT === null) { this.lastT = t; this.lastX = x; this.xF.filter(x, 1); return x; }
+    let dt = t - this.lastT;
+    if (!(dt > 0)) dt = 1 / 60;                       // garde-fou (timestamps identiques)
+    this.lastT = t;
+
+    const dx  = (x - this.lastX) / dt;
+    const edx = this.dxF.filter(dx, OneEuro.alpha(this.dCutoff, dt));
+    const cutoff = this.minCutoff + this.beta * Math.abs(edx);
+    const out = this.xF.filter(x, OneEuro.alpha(cutoff, dt));
+    this.lastX = x;
+    return out;
+  }
+}
+
+/** Paire de filtres One-Euro pour un point 2D. */
+class Point2DFilter {
+  constructor() {
+    this.fx = new OneEuro(CONFIG.OEF_MIN_CUTOFF, CONFIG.OEF_BETA, CONFIG.OEF_D_CUTOFF);
+    this.fy = new OneEuro(CONFIG.OEF_MIN_CUTOFF, CONFIG.OEF_BETA, CONFIG.OEF_D_CUTOFF);
+  }
+  filter(x, y, t) { return { x: this.fx.filter(x, t), y: this.fy.filter(y, t) }; }
+}
+
+
+/* =====================================================================================
+   4. AUDIO — Tone.js
+   -------------------------------------------------------------------------------------
+   L'horloge de jeu s'appuie sur `Tone.now()` (horloge audio, bien plus stable que
+   performance.now() pour le rythme). Le rendu reste sur requestAnimationFrame.
+   ===================================================================================== */
+const Audio = {
+  ready: false,
+  perfectSynth: null, goodSynth: null, metroSynth: null, metroLoop: null,
+
+  async init() {
+    if (this.ready) return;
+    await Tone.start();                                  // nécessite un geste utilisateur
+    Tone.Destination.volume.value = CONFIG.MASTER_VOLUME;
+
+    const reverb = new Tone.Reverb({ decay: 1.4, wet: 0.18 }).toDestination();
+
+    // Hit "Perfect" : ping brillant, court, avec une pointe de brillance.
+    this.perfectSynth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "triangle" },
+      envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.12 },
+    }).connect(reverb);
+    this.perfectSynth.volume.value = -4;
+
+    // Hit "Good" : plus sourd, plus court.
+    this.goodSynth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: "sine" },
+      envelope: { attack: 0.002, decay: 0.11, sustain: 0, release: 0.08 },
+    }).connect(reverb);
+    this.goodSynth.volume.value = -8;
+
+    // Métronome / piste rythmique optionnelle.
+    this.metroSynth = new Tone.MembraneSynth({
+      pitchDecay: 0.02, octaves: 4,
+      envelope: { attack: 0.001, decay: 0.16, sustain: 0 },
+    }).toDestination();
+    this.metroSynth.volume.value = -16;
+
+    Tone.Transport.bpm.value = CONFIG.BPM;
+    this.metroLoop = new Tone.Loop((time) => {
+      if (CONFIG.METRONOME_ON) this.metroSynth.triggerAttackRelease("C2", "16n", time);
+    }, "4n");
+
+    this.ready = true;
+  },
+
+  startTransport() {
+    Tone.Transport.stop(); Tone.Transport.position = 0;
+    this.metroLoop.start(0);
+    Tone.Transport.start();
+  },
+  stopTransport() { Tone.Transport.stop(); },
+
+  /** Son de hit ; la note monte avec le combo pour récompenser les séries. */
+  hit(grade, combo) {
+    if (!this.ready) return;
+    const scale = ["C5", "D5", "E5", "G5", "A5", "C6", "D6", "E6"];
+    const note = scale[Math.min(combo, scale.length - 1)];
+    if (grade === "PERFECT") {
+      this.perfectSynth.triggerAttackRelease([note, "G6"], "32n");
+    } else {
+      this.goodSynth.triggerAttackRelease(note, "32n");
+    }
+  },
+  // Miss : volontairement silencieux (feedback visuel discret uniquement).
+};
+
+
+/* =====================================================================================
+   5. HAND TRACKING
+   ===================================================================================== */
+const LM = { WRIST: 0, THUMB_TIP: 4, INDEX_TIP: 8, MIDDLE_MCP: 9 };
+
+/** État persistant d'une main : filtres + machine à états du pincement. */
+class HandState {
+  constructor(id) {
+    this.id = id;
+    this.thumbF = new Point2DFilter();
+    this.indexF = new Point2DFilter();
+    this.thumb = null;          // {x,y} normalisés (repère image, déjà en miroir)
+    this.index = null;
+    this.pinchPos = null;       // point milieu = curseur de jeu
+    this.ratio = 1;             // ratio de pincement courant
+    this.pinching = false;      // état hystérésis
+    this.justPinched = false;   // vrai UNE frame, sur la transition relâché -> actif
+    this.lastTriggerMs = -1e9;
+    this.lastSeen = -1e9;
+    this.visible = false;
+  }
+
+  /** Met à jour depuis les 21 landmarks d'une main. tSec = horloge de lissage. */
+  update(landmarks, tSec, nowMs) {
+    // Miroir horizontal : la vidéo est affichée en miroir, donc x -> 1 - x.
+    const mirror = (p) => ({ x: 1 - p.x, y: p.y });
+    const rawThumb  = mirror(landmarks[LM.THUMB_TIP]);
+    const rawIndex  = mirror(landmarks[LM.INDEX_TIP]);
+    const rawWrist  = mirror(landmarks[LM.WRIST]);
+    const rawMiddle = mirror(landmarks[LM.MIDDLE_MCP]);
+
+    this.thumb = this.thumbF.filter(rawThumb.x, rawThumb.y, tSec);
+    this.index = this.indexF.filter(rawIndex.x, rawIndex.y, tSec);
+
+    // Position du pincement = milieu pouce/index.
+    this.pinchPos = { x: (this.thumb.x + this.index.x) / 2, y: (this.thumb.y + this.index.y) / 2 };
+
+    // Ratio normalisé par la taille de la main (poignet -> base du majeur).
+    const dPinch = Math.hypot(this.thumb.x - this.index.x, this.thumb.y - this.index.y);
+    const dHand  = Math.hypot(rawWrist.x - rawMiddle.x, rawWrist.y - rawMiddle.y);
+    this.ratio = dHand > 1e-4 ? dPinch / dHand : 1;
+
+    // Hystérésis + cooldown.
+    this.justPinched = false;
+    if (!this.pinching && this.ratio < CONFIG.PINCH_ON_RATIO) {
+      this.pinching = true;
+      if (nowMs - this.lastTriggerMs > CONFIG.PINCH_COOLDOWN_MS) {
+        this.justPinched = true;
+        this.lastTriggerMs = nowMs;
+      }
+    } else if (this.pinching && this.ratio > CONFIG.PINCH_OFF_RATIO) {
+      this.pinching = false;
+    }
+
+    this.lastSeen = tSec;
+    this.visible = true;
+  }
+
+  /** Main non détectée cette frame : on la garde un instant puis on l'oublie. */
+  markMissing(tSec) {
+    if (tSec - this.lastSeen > CONFIG.HAND_LOST_TIMEOUT) {
+      this.visible = false;
+      this.pinching = false;
+      this.justPinched = false;
+    }
+  }
+}
+
+const Tracker = {
+  landmarker: null,
+  video: null,
+  hands: [],                 // HandState[], un par main suivie
+  lastVideoTime: -1,
+  ready: false,
+
+  async loadModel(onProgress) {
+    onProgress?.("Chargement du moteur de vision…");
+    const fileset = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    onProgress?.("Chargement du modèle de mains…");
+    this.landmarker = await HandLandmarker.createFromOptions(fileset, {
+      baseOptions: {
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/" +
+                        "hand_landmarker/float16/1/hand_landmarker.task",
+        delegate: "GPU",
+      },
+      runningMode: "VIDEO",
+      numHands: CONFIG.MAX_HANDS,
+      minHandDetectionConfidence: CONFIG.MIN_DETECTION_CONF,
+      minHandPresenceConfidence:  CONFIG.MIN_PRESENCE_CONF,
+      minTrackingConfidence:      CONFIG.MIN_TRACKING_CONF,
+    });
+    for (let i = 0; i < CONFIG.MAX_HANDS; i++) this.hands.push(new HandState(i));
+  },
+
+  async startCamera(onProgress) {
+    onProgress?.("Demande d'accès à la webcam…");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("NO_MEDIA_DEVICES");
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
+      audio: false,
+    });
+    const v = document.createElement("video");
+    v.autoplay = true; v.playsInline = true; v.muted = true; v.srcObject = stream;
+    await v.play();
+    // Attendre des dimensions valides (Safari renvoie 0 au tout début).
+    await new Promise((res) => {
+      const check = () => (v.videoWidth > 0 ? res() : requestAnimationFrame(check));
+      check();
+    });
+    this.video = v;
+    this.ready = true;
+  },
+
+  /** Détection sur la frame courante. tSec = horloge de jeu (pour le lissage). */
+  detect(tSec, nowMs) {
+    if (!this.ready || !this.landmarker) return;
+    const v = this.video;
+    if (v.currentTime === this.lastVideoTime) return;   // pas de nouvelle frame vidéo
+    this.lastVideoTime = v.currentTime;
+
+    let result;
+    try { result = this.landmarker.detectForVideo(v, nowMs); }
+    catch { return; }                                    // frame invalide : on saute
+
+    const list = result?.landmarks ?? [];
+    for (let i = 0; i < this.hands.length; i++) {
+      if (list[i]) this.hands[i].update(list[i], tSec, nowMs);
+      else         this.hands[i].markMissing(tSec);
+    }
+  },
+};
+
+
+/* =====================================================================================
+   6. LOGIQUE DE JEU
+   ===================================================================================== */
+const GRADES = {
+  PERFECT: { label: "PERFECT", color: "#4dd8ff", score: CONFIG.SCORE_PERFECT, weight: 1.0 },
+  GOOD:    { label: "GOOD",    color: "#ffd24d", score: CONFIG.SCORE_GOOD,    weight: 0.34 },
+  MISS:    { label: "MISS",    color: "#ff5566", score: 0,                    weight: 0.0  },
+};
+
+const Game = {
+  state: "idle",        // idle | countdown | playing | finished
+  t0: 0,                // Tone.now() au démarrage (référence de l'horloge de jeu)
+  time: 0,              // temps de jeu courant, en secondes
+  targets: [],          // copie vivante de la beatmap
+  effects: [],          // particules / flashs / croix
+  score: 0, combo: 0, maxCombo: 0,
+  counts: { PERFECT: 0, GOOD: 0, MISS: 0 },
+  lastGrade: null, lastGradeAt: -10,
+  lastOffset: 0,        // écart signé du dernier hit (ms) : négatif = trop tôt
+  duration: 0,
+
+  reset() {
+    this.targets = BEATMAP.map((n, i) => ({
+      id: i, x: n.x, y: n.y,
+      t: n.t + CONFIG.COUNTDOWN,           // décale toute la map après le décompte
+      hit: false, dead: false, grade: null,
+    }));
+    this.duration = (this.targets.at(-1)?.t ?? 0) + 2.0;
+    this.effects.length = 0;
+    this.score = 0; this.combo = 0; this.maxCombo = 0;
+    this.counts = { PERFECT: 0, GOOD: 0, MISS: 0 };
+    this.lastGrade = null; this.lastGradeAt = -10; this.lastOffset = 0;
+    this.time = 0;
+  },
+
+  start() {
+    this.reset();
+    this.t0 = Tone.now();
+    this.state = "playing";
+    Audio.startTransport();
+  },
+
+  /** Nombre total de notes jugées. */
+  get judged() { return this.counts.PERFECT + this.counts.GOOD + this.counts.MISS; },
+
+  /** Précision pondérée, en %. */
+  get accuracy() {
+    if (this.judged === 0) return 100;
+    const got = this.counts.PERFECT * GRADES.PERFECT.weight + this.counts.GOOD * GRADES.GOOD.weight;
+    return (got / this.judged) * 100;
+  },
+
+  /** Cibles actuellement affichées / jugeables. */
+  activeTargets() {
+    return this.targets.filter(o =>
+      !o.dead && !o.hit &&
+      this.time >= o.t - CONFIG.APPROACH_TIME &&
+      this.time <= o.t + CONFIG.WINDOW_GOOD
+    );
+  },
+
+  /**
+   * Tente un hit à la position `pos` (normalisée, repère zone vidéo).
+   * Retourne true si une cible a été consommée.
+   */
+  tryHit(pos, view) {
+    const hitR = CONFIG.TARGET_RADIUS * CONFIG.HIT_RADIUS_SCALE;
+    let best = null, bestDelta = Infinity;
+
+    for (const o of this.activeTargets()) {
+      // Distance en espace écran (pour rester circulaire malgré l'aspect ratio).
+      const dx = (pos.x - o.x) * view.dw;
+      const dy = (pos.y - o.y) * view.dh;
+      const dist = Math.hypot(dx, dy);
+      if (dist > hitR * view.minSide) continue;
+
+      const delta = Math.abs(this.time - o.t);
+      if (delta < bestDelta) { bestDelta = delta; best = o; }
+    }
+    if (!best) return false;
+
+    const grade = bestDelta <= CONFIG.WINDOW_PERFECT ? "PERFECT"
+                : bestDelta <= CONFIG.WINDOW_GOOD    ? "GOOD"
+                : null;
+    if (!grade) return false;   // hors fenêtre : le pincement est ignoré (pas de pénalité)
+
+    this.judge(best, grade);
+    return true;
+  },
+
+  judge(target, grade) {
+    target.hit = true; target.dead = true; target.grade = grade;
+    this.counts[grade]++;
+    this.lastGrade = grade; this.lastGradeAt = this.time;
+    this.lastOffset = (this.time - target.t) * 1000;
+
+    if (grade === "MISS") {
+      this.combo = 0;
+      Effects.miss(target.x, target.y);
+    } else {
+      const mult = 1 + Math.min(this.combo, CONFIG.COMBO_CAP) * CONFIG.COMBO_BONUS;
+      this.score += Math.round(GRADES[grade].score * mult);
+      this.combo++;
+      this.maxCombo = Math.max(this.maxCombo, this.combo);
+      Effects.burst(target.x, target.y, GRADES[grade].color, grade === "PERFECT" ? 26 : 14);
+      Effects.flash(GRADES[grade].color, grade === "PERFECT" ? 0.28 : 0.16);
+      Audio.hit(grade, this.combo);
+    }
+  },
+
+  /** Avance l'horloge, retire les cibles ratées, fait vieillir les effets. */
+  update() {
+    this.time = Tone.now() - this.t0;
+
+    for (const o of this.targets) {
+      if (!o.dead && this.time > o.t + CONFIG.WINDOW_GOOD) this.judge(o, "MISS");
+    }
+    Effects.update();
+
+    if (this.time > this.duration && this.state === "playing") this.finish();
+  },
+
+  finish() {
+    this.state = "finished";
+    Audio.stopTransport();
+    UI.showEnd();
+  },
+};
+
+
+/* ---- Effets visuels : particules, flash plein écran, croix de miss ------------------- */
+const Effects = {
+  items: [],
+  flashColor: null, flashAmount: 0,
+
+  burst(x, y, color, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 0.10 + Math.random() * 0.42;
+      this.items.push({
+        kind: "p", x, y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 1, decay: 1.6 + Math.random() * 1.4, color,
+        size: 2 + Math.random() * 4,
+      });
+    }
+    this.items.push({ kind: "ring", x, y, life: 1, decay: 2.6, color });
+  },
+
+  miss(x, y) { this.items.push({ kind: "miss", x, y, life: 1, decay: 1.6, color: GRADES.MISS.color }); },
+
+  flash(color, amount) { this.flashColor = color; this.flashAmount = Math.max(this.flashAmount, amount); },
+
+  update() {
+    const dt = Render.dt;
+    for (const e of this.items) {
+      e.life -= e.decay * dt;
+      if (e.kind === "p") {
+        e.x += e.vx * dt; e.y += e.vy * dt;
+        e.vy += 0.55 * dt;                 // petite gravité
+        e.vx *= 0.97; e.vy *= 0.97;
+      }
+    }
+    this.items = this.items.filter(e => e.life > 0);
+    this.flashAmount = Math.max(0, this.flashAmount - dt * 2.2);
+  },
+};
+
+
+/* =====================================================================================
+   7. RENDU
+   ===================================================================================== */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const Render = {
+  view: { dx: 0, dy: 0, dw: 1, dh: 1, minSide: 1 },   // zone vidéo affichée (mode "cover")
+  dt: 1 / 60, lastFrame: 0, fps: 60,
+
+  resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width  = Math.floor(window.innerWidth  * dpr);
+    canvas.height = Math.floor(window.innerHeight * dpr);
+    canvas.style.width  = window.innerWidth  + "px";
+    canvas.style.height = window.innerHeight + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  },
+
+  /** Calcule le placement "cover" de la vidéo. Landmarks ET cibles utilisent ce repère. */
+  computeView() {
+    const cw = window.innerWidth, ch = window.innerHeight;
+    const v = Tracker.video;
+    if (!v || !v.videoWidth) { this.view = { dx: 0, dy: 0, dw: cw, dh: ch, minSide: Math.min(cw, ch) }; return; }
+    const s = Math.max(cw / v.videoWidth, ch / v.videoHeight);
+    const dw = v.videoWidth * s, dh = v.videoHeight * s;
+    this.view = { dx: (cw - dw) / 2, dy: (ch - dh) / 2, dw, dh, minSide: Math.min(dw, dh) };
+  },
+
+  /** normalisé (0..1 zone vidéo) -> pixels canvas */
+  toScreen(x, y) {
+    const v = this.view;
+    return { x: v.dx + x * v.dw, y: v.dy + y * v.dh };
+  },
+  radiusPx(rNorm) { return rNorm * this.view.minSide; },
+
+  /* ---- Vidéo, en miroir horizontal (sinon injouable) -------------------------------- */
+  drawVideo() {
+    const v = Tracker.video;
+    const { dx, dy, dw, dh } = this.view;
+    ctx.save();
+    if (v && v.videoWidth) {
+      ctx.translate(dx + dw, dy);
+      ctx.scale(-1, 1);                                   // miroir
+      ctx.drawImage(v, 0, 0, dw, dh);
+    } else {
+      ctx.fillStyle = "#0b0b16";
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+    }
+    ctx.restore();
+    // Voile sombre : les cibles ressortent nettement sur l'image.
+    ctx.fillStyle = "rgba(6,6,14,0.45)";
+    ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+  },
+
+  /* ---- Cibles + cercles d'approche --------------------------------------------------- */
+  drawTargets() {
+    const now = Game.time;
+    const rTarget = this.radiusPx(CONFIG.TARGET_RADIUS);
+
+    // Rendu des plus tardives vers les plus proches : la note à jouer est au-dessus.
+    const visible = Game.targets
+      .filter(o => !o.dead && now >= o.t - CONFIG.APPROACH_TIME && now <= o.t + CONFIG.WINDOW_GOOD)
+      .sort((a, b) => b.t - a.t);
+
+    for (const o of visible) {
+      const p = this.toScreen(o.x, o.y);
+      const age = now - (o.t - CONFIG.APPROACH_TIME);        // 0 -> APPROACH_TIME
+      const prog = Math.min(age / CONFIG.APPROACH_TIME, 1.35);
+      const alpha = Math.min(age / CONFIG.FADE_IN, 1);
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      // Disque de la cible
+      const g = ctx.createRadialGradient(p.x, p.y, rTarget * 0.15, p.x, p.y, rTarget);
+      g.addColorStop(0, "rgba(255,255,255,0.30)");
+      g.addColorStop(1, "rgba(120,120,255,0.06)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rTarget, 0, Math.PI * 2); ctx.fill();
+
+      // Anneau de la cible ; vire au blanc dans la fenêtre Perfect
+      const inPerfect = Math.abs(now - o.t) <= CONFIG.WINDOW_PERFECT;
+      ctx.lineWidth = inPerfect ? 6 : 4;
+      ctx.strokeStyle = inPerfect ? "#ffffff" : "#8ea2ff";
+      ctx.shadowColor = inPerfect ? "#4dd8ff" : "transparent";
+      ctx.shadowBlur = inPerfect ? 22 : 0;
+      ctx.beginPath(); ctx.arc(p.x, p.y, rTarget, 0, Math.PI * 2); ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Cercle d'approche : rétrécit et touche la cible pile à t
+      if (prog <= 1.05) {
+        const rA = rTarget * (CONFIG.APPROACH_START - (CONFIG.APPROACH_START - 1) * Math.min(prog, 1));
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = `rgba(255,255,255,${0.28 + 0.55 * Math.min(prog, 1)})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, rA, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  },
+
+  /* ---- Mains : points pouce/index + ligne de pincement ------------------------------- */
+  drawHands() {
+    for (const h of Tracker.hands) {
+      if (!h.visible || !h.thumb) continue;
+      const a = this.toScreen(h.thumb.x, h.thumb.y);
+      const b = this.toScreen(h.index.x, h.index.y);
+      const m = this.toScreen(h.pinchPos.x, h.pinchPos.y);
+
+      // Ligne pouce–index : s'épaissit et se colore quand le pincement est actif
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineWidth = h.pinching ? 9 : 3;
+      ctx.strokeStyle = h.pinching ? "#4dffb0" : "rgba(255,255,255,0.55)";
+      ctx.shadowColor = h.pinching ? "#4dffb0" : "transparent";
+      ctx.shadowBlur = h.pinching ? 18 : 0;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Bouts des doigts
+      for (const [pt, col] of [[a, "#ff5edb"], [b, "#4dd8ff"]]) {
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, h.pinching ? 9 : 7, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 2; ctx.stroke();
+      }
+
+      // Curseur (point milieu)
+      ctx.strokeStyle = h.pinching ? "#4dffb0" : "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(m.x, m.y, h.pinching ? 16 : 11, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  },
+
+  /* ---- Effets ------------------------------------------------------------------------ */
+  drawEffects() {
+    for (const e of Effects.items) {
+      const p = this.toScreen(e.x, e.y);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, e.life);
+      if (e.kind === "p") {
+        ctx.fillStyle = e.color;
+        ctx.beginPath(); ctx.arc(p.x, p.y, e.size * e.life, 0, Math.PI * 2); ctx.fill();
+      } else if (e.kind === "ring") {
+        const r = this.radiusPx(CONFIG.TARGET_RADIUS) * (1 + (1 - e.life) * 1.8);
+        ctx.strokeStyle = e.color; ctx.lineWidth = 4 * e.life;
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2); ctx.stroke();
+      } else if (e.kind === "miss") {
+        const r = this.radiusPx(CONFIG.TARGET_RADIUS) * 0.6;
+        ctx.strokeStyle = e.color; ctx.lineWidth = 4; ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(p.x - r, p.y - r); ctx.lineTo(p.x + r, p.y + r);
+        ctx.moveTo(p.x + r, p.y - r); ctx.lineTo(p.x - r, p.y + r);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    // Flash plein écran
+    if (Effects.flashAmount > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = Effects.flashAmount;
+      ctx.fillStyle = Effects.flashColor || "#ffffff";
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.restore();
+    }
+  },
+
+  /* ---- HUD --------------------------------------------------------------------------- */
+  drawHUD() {
+    const W = window.innerWidth, H = window.innerHeight;
+    ctx.save();
+    ctx.textBaseline = "top";
+
+    // Score (haut-droite)
+    ctx.textAlign = "right";
+    ctx.font = "700 40px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(String(Game.score).padStart(7, "0"), W - 24, 20);
+    ctx.font = "600 18px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillStyle = "#b9b9cf";
+    ctx.fillText(`${Game.accuracy.toFixed(2)} %`, W - 24, 68);
+
+    // Combo (bas-gauche)
+    ctx.textAlign = "left";
+    if (Game.combo > 0) {
+      const pop = Math.max(0, 1 - (Game.time - Game.lastGradeAt) * 5);
+      ctx.font = `800 ${44 + pop * 12}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillStyle = Game.combo >= 10 ? "#4dffb0" : "#ffffff";
+      ctx.textBaseline = "bottom";
+      ctx.fillText(`${Game.combo}x`, 24, H - 22);
+      ctx.textBaseline = "top";
+    }
+
+    // Dernier grade (centre haut), s'estompe en ~0.8 s
+    const gAge = Game.time - Game.lastGradeAt;
+    if (Game.lastGrade && gAge < 0.8) {
+      const gr = GRADES[Game.lastGrade];
+      ctx.globalAlpha = 1 - gAge / 0.8;
+      ctx.textAlign = "center";
+      ctx.font = "800 34px 'Segoe UI', system-ui, sans-serif";
+      ctx.fillStyle = gr.color;
+      ctx.fillText(gr.label, W / 2, 26);
+      if (Game.lastGrade !== "MISS") {
+        ctx.font = "600 15px 'Segoe UI', system-ui, sans-serif";
+        ctx.fillStyle = "rgba(255,255,255,0.75)";
+        const off = Game.lastOffset;
+        ctx.fillText(`${off >= 0 ? "+" : ""}${off.toFixed(0)} ms ${off < 0 ? "(tôt)" : "(tard)"}`, W / 2, 66);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Avertissement main perdue
+    if (Game.state === "playing" && !Tracker.hands.some(h => h.visible)) {
+      ctx.textAlign = "center";
+      ctx.font = "600 20px 'Segoe UI', system-ui, sans-serif";
+      ctx.fillStyle = "#ff9c5e";
+      ctx.fillText("Main non détectée — montre ta main à la caméra", W / 2, H / 2 - 12);
+    }
+
+    // Barre de progression du morceau
+    if (Game.state === "playing") {
+      const prog = Math.max(0, Math.min(Game.time / Game.duration, 1));
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.fillRect(0, H - 5, W, 5);
+      ctx.fillStyle = "#4dd8ff";
+      ctx.fillRect(0, H - 5, W * prog, 5);
+    }
+
+    // Décompte avant la première note
+    if (Game.state === "playing" && Game.time < CONFIG.COUNTDOWN) {
+      const left = Math.ceil(CONFIG.COUNTDOWN - Game.time);
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = "800 120px 'Segoe UI', system-ui, sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.fillText(String(left), W / 2, H / 2);
+      ctx.font = "600 20px 'Segoe UI', system-ui, sans-serif";
+      ctx.fillStyle = "#b9b9cf";
+      ctx.fillText("Prépare ta main…", W / 2, H / 2 + 90);
+    }
+
+    // Debug
+    if (CONFIG.DEBUG) {
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+      ctx.font = "500 13px monospace";
+      ctx.fillStyle = "#8affc0";
+      const lines = [
+        `fps ${this.fps.toFixed(0)}  t ${Game.time.toFixed(2)}s`,
+        ...Tracker.hands.map(h =>
+          `main${h.id} ${h.visible ? "OK " : "-- "} ratio ${h.ratio.toFixed(3)} ` +
+          `${h.pinching ? "[PINCE]" : "       "}`),
+        `seuils on<${CONFIG.PINCH_ON_RATIO} off>${CONFIG.PINCH_OFF_RATIO}`,
+        `actives ${Game.activeTargets().length}  effets ${Effects.items.length}`,
+      ];
+      lines.forEach((l, i) => ctx.fillText(l, 16, 16 + i * 16));
+    }
+    ctx.restore();
+  },
+
+  frame(nowMs) {
+    // dt du rendu (borné : évite les sauts après un changement d'onglet)
+    this.dt = this.lastFrame ? Math.min((nowMs - this.lastFrame) / 1000, 0.05) : 1 / 60;
+    this.lastFrame = nowMs;
+    this.fps = this.fps * 0.9 + (1 / Math.max(this.dt, 1e-4)) * 0.1;
+
+    this.computeView();
+    this.drawVideo();
+    this.drawTargets();
+    this.drawEffects();
+    this.drawHands();
+    this.drawHUD();
+  },
+};
+
+
+/* =====================================================================================
+   8. BOUCLE PRINCIPALE & BOOTSTRAP
+   -------------------------------------------------------------------------------------
+   Rendu sur requestAnimationFrame ; timing de jeu sur l'horloge audio Tone.now().
+   Les deux sont découplés : un frame drop ne décale pas le rythme.
+   ===================================================================================== */
+function loop(nowMs) {
+  requestAnimationFrame(loop);
+
+  // Horloge de jeu (avancée avant la détection pour que le lissage utilise le bon temps).
+  if (Game.state === "playing") Game.update();
+  const tSec = Game.state === "playing" ? Game.time : nowMs / 1000;
+
+  // 1) Tracking
+  Tracker.detect(tSec, nowMs);
+
+  // 2) Entrées : un hit par transition relâché -> actif
+  if (Game.state === "playing") {
+    for (const h of Tracker.hands) {
+      if (h.visible && h.justPinched) Game.tryHit(h.pinchPos, Render.view);
+    }
+  } else {
+    Effects.update();   // garde les effets vivants sur les écrans non jouables
+  }
+
+  // 3) Rendu
+  Render.frame(nowMs);
+}
+
+
+/* ---- UI / écrans --------------------------------------------------------------------- */
+const UI = {
+  start:  document.getElementById("startScreen"),
+  error:  document.getElementById("errorScreen"),
+  end:    document.getElementById("endScreen"),
+  status: document.getElementById("startStatus"),
+  errMsg: document.getElementById("errorMsg"),
+  endStats: document.getElementById("endStats"),
+  btn:    document.getElementById("startBtn"),
+
+  setStatus(s) { this.status.textContent = s; },
+  hideAll() { [this.start, this.error, this.end].forEach(e => e.classList.add("hidden")); },
+  showError(msg) { this.hideAll(); this.errMsg.innerHTML = msg; this.error.classList.remove("hidden"); },
+  showEnd() {
+    const c = Game.counts;
+    this.endStats.innerHTML =
+      `Score <b>${Game.score}</b> · Précision <b>${Game.accuracy.toFixed(2)} %</b> · ` +
+      `Combo max <b>${Game.maxCombo}x</b><br>` +
+      `<span style="color:#4dd8ff">Perfect ${c.PERFECT}</span> · ` +
+      `<span style="color:#ffd24d">Good ${c.GOOD}</span> · ` +
+      `<span style="color:#ff5566">Miss ${c.MISS}</span>`;
+    this.end.classList.remove("hidden");
+  },
+};
+
+/** Traduit une erreur technique en message clair. */
+function explainError(err) {
+  const name = err?.name || "";
+  const msg  = err?.message || String(err);
+  if (msg === "NO_MEDIA_DEVICES") {
+    return "Ce navigateur n'expose pas la webcam.<br>" +
+           "Vérifie que la page est servie en <b>https://</b> ou depuis <b>localhost</b> " +
+           "(un fichier ouvert en <code>file://</code> peut être bloqué selon le navigateur).";
+  }
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Accès à la webcam <b>refusé</b>.<br>Autorise la caméra dans la barre d'adresse " +
+           "(icône caméra), puis clique sur Réessayer.";
+  }
+  if (name === "NotFoundError" || name === "OverconstrainedError") {
+    return "Aucune webcam trouvée.<br>Branche une caméra puis clique sur Réessayer.";
+  }
+  if (name === "NotReadableError") {
+    return "La webcam est déjà utilisée par une autre application " +
+           "(Zoom, Teams, OBS…).<br>Ferme-la puis réessaie.";
+  }
+  return "Échec du démarrage :<br><code>" + msg + "</code>";
+}
+
+let booted = false;
+
+async function boot() {
+  UI.btn.disabled = true;
+  try {
+    await Audio.init();                                  // doit rester dans le geste user
+    if (!Tracker.landmarker) await Tracker.loadModel(s => UI.setStatus(s));
+    if (!Tracker.ready)      await Tracker.startCamera(s => UI.setStatus(s));
+
+    UI.hideAll();
+    Game.start();
+    if (!booted) { booted = true; requestAnimationFrame(loop); }
+  } catch (err) {
+    console.error(err);
+    UI.showError(explainError(err));
+  } finally {
+    UI.btn.disabled = false;
+    UI.setStatus("Prêt.");
+  }
+}
+
+/* ---- Événements ---------------------------------------------------------------------- */
+UI.btn.addEventListener("click", boot);
+document.getElementById("retryBtn").addEventListener("click", () => { UI.hideAll(); boot(); });
+document.getElementById("replayBtn").addEventListener("click", () => { UI.hideAll(); Game.start(); });
+
+window.addEventListener("resize", () => Render.resize());
+Render.resize();
+
+window.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+  if (k === "r" && Tracker.ready) { UI.hideAll(); Game.start(); }
+  if (k === "m") { CONFIG.METRONOME_ON = !CONFIG.METRONOME_ON; }
+  if (k === "d") { CONFIG.DEBUG = !CONFIG.DEBUG; }
+});
+
+// Exposé pour bidouiller en direct depuis la console du navigateur.
+window.Fingertune = { CONFIG, BEATMAP, Game, Tracker, Render, Audio, Effects };
+</script>
+</body>
+</html>
