@@ -1,15 +1,14 @@
 name: Deploy to GitHub Pages
 
-# Manual only, on purpose.
+# One-time setup, required before this workflow can succeed:
+#   Settings > Pages > Source = "GitHub Actions"
 #
-# GitHub Pages has to be enabled on the repository first, and on the free plan
-# that requires the repository to be public. Running this on every push while
-# Pages is off just produces a red X on every commit ("Get Pages site failed").
-#
-# Once the repository is public: Settings > Pages > Source = "GitHub Actions",
-# then run this workflow from the Actions tab. Switch back to `on: push` if you
-# want every commit deployed.
+# It cannot be automated from here: creating the Pages site through the API
+# needs repository-admin rights, which the workflow's GITHUB_TOKEN does not
+# have ("Resource not accessible by integration").
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -25,9 +24,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -40,11 +39,8 @@ jobs:
 
       - run: npm run build
 
-      - uses: actions/configure-pages@v5
-        with:
-          # Turns Pages on if it is not already, instead of failing.
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
@@ -56,4 +52,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
