@@ -15,6 +15,8 @@ interface Props {
   loading: boolean;
   /** Local best score on the selected beatmap, or null. */
   best: BestScore | null;
+  /** The custom-music panel, rendered by the parent that owns the audio. */
+  music: JSX.Element;
   /** False until this hand's pinch range has been measured. */
   calibrated: boolean;
   onRecalibrate: () => void;
@@ -39,6 +41,7 @@ export function StartScreen({
   status,
   loading,
   best,
+  music,
   calibrated,
   onRecalibrate,
   onStart,
@@ -132,6 +135,8 @@ export function StartScreen({
           skeleton · <kbd>P</kbd> gauge · <kbd>F</kbd> playfield · <kbd>D</kbd> debug
         </li>
       </ul>
+
+      {music}
 
       <button type="button" onClick={onStart} disabled={loading}>
         {loading ? 'Loading…' : 'Allow webcam / Play'}

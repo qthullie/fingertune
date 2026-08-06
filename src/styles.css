@@ -624,3 +624,80 @@ kbd {
   height: 100%;
   background: rgba(255, 255, 255, 0.45);
 }
+
+
+/* --------------------------------------------------------------------------
+   Custom music
+   -------------------------------------------------------------------------- */
+
+/* Collapsed by default. Most players want the generated track and should not
+   have to scroll past a file picker to reach the Play button. */
+.music {
+  width: min(460px, 88vw);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+}
+
+.music > summary {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.music > summary::-webkit-details-marker {
+  display: none;
+}
+
+.music > summary::before {
+  content: '♪ ';
+  opacity: 0.6;
+}
+
+.music-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+
+/* The native file input is unstyleable and says "No file chosen" in whatever
+   language the browser feels like; the label carries the real state instead. */
+.music-file input {
+  display: none;
+}
+
+.music-file span {
+  display: block;
+  padding: 9px 14px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.music-file span:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.music-bpm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.music-bpm input {
+  width: 74px;
+  margin-left: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}

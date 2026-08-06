@@ -227,6 +227,11 @@ export class AudioEngine {
    * file cannot be fetched, the generated track is used instead.
    */
   async loadTrack(url: string | undefined): Promise<void> {
+    // Replacing a track: the previous Player keeps its buffer and its output
+    // connection until disposed, so skipping this leaves both playing at once.
+    this.player?.stop();
+    this.player?.dispose();
+    this.player = null;
     if (!url) return;
     try {
       const player = new Tone.Player({ url, loop: false }).toDestination();

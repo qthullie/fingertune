@@ -13,6 +13,7 @@ import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/
 import { beatmaps, defaultBeatmap, findBeatmap } from './beatmaps';
 import { parseChallenge } from './lib/challenge';
 import { CalibrationScreen } from './components/CalibrationScreen';
+import { MusicPicker } from './components/MusicPicker';
 import { clearCalibration, loadCalibration } from './lib/calibration';
 import type { Beatmap } from './game/types';
 import { assets, settings } from './config/settings';
@@ -63,6 +64,14 @@ export function App(): JSX.Element {
   beatmapRef.current = beatmap;
   const phaseRef = useRef(startPhase);
   phaseRef.current = startPhase;
+  /* Custom track chosen at runtime. `assets.musicUrl` stays the build-time
+     default; this overrides it for the session only. */
+  const [track, setTrack] = useState<{ url: string; name: string } | null>(null);
+  const [bpm, setBpm] = useState(defaultBeatmap.bpm);
+  const trackRef = useRef(track);
+  trackRef.current = track;
+  const bpmRef = useRef(bpm);
+  bpmRef.current = bpm;
   const [calibrate, setCalibrate] = useState(storedCalibration === null);
   const calibrateRef = useRef(calibrate);
   calibrateRef.current = calibrate;
@@ -108,7 +117,8 @@ export function App(): JSX.Element {
     setRecord(null);
     tracker.resetHands();
     const map = beatmapRef.current;
-    audio.setBpm(map.bpm);
+    // A custom track carries its own tempo; otherwise the map's is authoritative.
+    audio.setBpm(trackRef.current ? bpmRef.current : map.bpm);
     // The music defines t=0, so notes land on the musical grid.
     const startAt = audio.startMusic();
     engine.start(map, startAt, phaseRef.current);
@@ -124,7 +134,7 @@ export function App(): JSX.Element {
       // Immediate blip: if you cannot hear it, the problem is the audio output
       // (muted tab, system volume), not the game.
       audio.playTestBlip();
-      await audio.loadTrack(assets.musicUrl);
+      await audio.loadTrack(trackRef.current?.url ?? assets.musicUrl);
       await tracker.loadModel(setStatus);
       await tracker.startCamera(setStatus);
       setStatus('Ready.');
@@ -193,9 +203,26 @@ export function App(): JSX.Element {
             setBeatmap(next);
             setStartPhase(0);
             setBest(loadBest(next.id));
+            if (!track) setBpm(next.bpm);
           }}
           startPhase={startPhase}
           onSelectPhase={setStartPhase}
+          music={
+            <MusicPicker
+              trackName={track?.name ?? null}
+              onPick={(url, name) => {
+                setTrack({ url, name });
+                void audio.loadTrack(url);
+              }}
+              onClear={() => {
+                setTrack(null);
+                setBpm(beatmap.bpm);
+                void audio.loadTrack(undefined);
+              }}
+              bpm={bpm}
+              onBpm={setBpm}
+            />
+          }
           calibrated={!calibrate}
           onRecalibrate={() => {
             clearCalibration();
