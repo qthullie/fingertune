@@ -10,7 +10,8 @@ import { HandTracker } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
 import { explainError, type FriendlyError } from './lib/errors';
 import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/highscores';
-import { defaultBeatmap } from './beatmaps';
+import { beatmaps, defaultBeatmap } from './beatmaps';
+import type { Beatmap } from './game/types';
 import { assets, settings } from './config/settings';
 
 /**
@@ -31,9 +32,18 @@ export function App(): JSX.Element {
   const [status, setStatus] = useState('Hand-tracking model not loaded yet (~7 MB on first run).');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
+  const [beatmap, setBeatmap] = useState<Beatmap>(defaultBeatmap);
+  const [startPhase, setStartPhase] = useState(0);
   const [best, setBest] = useState<BestScore | null>(() => loadBest(defaultBeatmap.id));
   const [record, setRecord] = useState<RecordResult | null>(null);
   const configuredRef = useRef(false);
+  /* `configure` is called once and captures its callbacks, but the selected map
+     and phase change afterwards. Refs let those callbacks read the current
+     selection without rebinding the audio clock on every state change. */
+  const beatmapRef = useRef(beatmap);
+  beatmapRef.current = beatmap;
+  const phaseRef = useRef(startPhase);
+  phaseRef.current = startPhase;
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
 
@@ -52,7 +62,7 @@ export function App(): JSX.Element {
         onResume: (at) => audio.resumeMusic(at),
         onFinish: () => {
           const final = engine.getSnapshot();
-          const result = submitScore(defaultBeatmap.id, {
+          const result = submitScore(beatmapRef.current.id, {
             score: final.score,
             accuracy: final.accuracy,
             maxCombo: final.maxCombo,
@@ -66,10 +76,11 @@ export function App(): JSX.Element {
     }
     setRecord(null);
     tracker.resetHands();
-    audio.setBpm(defaultBeatmap.bpm);
+    const map = beatmapRef.current;
+    audio.setBpm(map.bpm);
     // The music defines t=0, so notes land on the musical grid.
     const startAt = audio.startMusic();
-    engine.start(defaultBeatmap, startAt);
+    engine.start(map, startAt, phaseRef.current);
     setUiPhase('playing');
   }, []);
 
@@ -131,7 +142,7 @@ export function App(): JSX.Element {
   /* Console sandbox: window.fingertune.settings.PINCH_ON_RATIO = 0.35 */
   useEffect(() => {
     Object.assign(window, {
-      fingertune: { settings, engine, tracker, audio, beatmap: defaultBeatmap },
+      fingertune: { settings, engine, tracker, audio, beatmaps },
     });
   }, []);
 
@@ -142,7 +153,15 @@ export function App(): JSX.Element {
 
       {uiPhase === 'start' && (
         <StartScreen
-          beatmapTitle={defaultBeatmap.title}
+          beatmaps={beatmaps}
+          selected={beatmap}
+          onSelect={(next) => {
+            setBeatmap(next);
+            setStartPhase(0);
+            setBest(loadBest(next.id));
+          }}
+          startPhase={startPhase}
+          onSelectPhase={setStartPhase}
           status={status}
           loading={loading}
           best={best}

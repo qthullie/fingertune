@@ -462,3 +462,89 @@ kbd {
   background: var(--accent-a);
   transition: width 0.1s linear;
 }
+
+
+/* --------------------------------------------------------------------------
+   Pickers (beatmap and starting phase)
+   -------------------------------------------------------------------------- */
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* One beatmap. Reset the global button styling first: these are choices, not
+   calls to action, and the gradient pill would make three of them shout over
+   the one button on the screen that actually starts the game. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 150px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+
+.card:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.card--active {
+  background: rgba(77, 216, 255, 0.12);
+  border-color: var(--accent-a, #4dd8ff);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.card-meta,
+.card-best {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.card--active .card-best {
+  opacity: 0.85;
+}
+
+.chip {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.chip:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chip--active {
+  color: #06060c;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+  border-color: transparent;
+}
+
+/* The start screen now has real content, so it scrolls rather than clipping
+   on a short window -- a laptop at 720p must still reach the Play button. */
+.overlay--start {
+  justify-content: flex-start;
+  gap: 14px;
+  overflow-y: auto;
+}

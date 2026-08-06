@@ -51,6 +51,8 @@ export class GameEngine {
   private phaseEventId = 0;
   /** Phases shifted by the countdown, ready to compare against `time`. */
   private phases: BeatmapPhase[] = [];
+  /** Index, in the beatmap's own phase list, that this run started from. */
+  private startPhase = 0;
 
   private t0 = 0;
   private clock: () => number = () => performance.now() / 1000;
@@ -147,17 +149,29 @@ export class GameEngine {
    * @param startAt audio-clock instant to use as the run's t=0. Lets the music
    *                and the targets start on the very same audio sample.
    *                Defaults to now.
+   * @param fromPhase index of the phase to start at. Everything before it is
+   *                dropped and the rest slides back to zero, so starting at
+   *                Hard is a real run at Hard rather than a fast-forward: the
+   *                countdown, the music and the notes all still line up.
    */
-  start(beatmap: Beatmap, startAt?: number): void {
+  start(beatmap: Beatmap, startAt?: number, fromPhase = 0): void {
     this.beatmap = beatmap;
 
-    // Phases are shifted by the countdown, exactly like the notes.
-    this.phases = beatmap.phases
-      .map((phase) => ({ ...phase, start: phase.start + settings.COUNTDOWN }))
-      .sort((a, b) => a.start - b.start);
+    const sorted = [...beatmap.phases].sort((a, b) => a.start - b.start);
+    const index = Math.max(0, Math.min(fromPhase, sorted.length - 1));
+    // Seconds cut from the front of the map.
+    const skip = sorted[index]?.start ?? 0;
+    this.startPhase = index;
 
-    this.targets = beatmap.notes.map((note, i) => {
-      const t = note.t + settings.COUNTDOWN;
+    // Phases are shifted by the countdown, exactly like the notes.
+    this.phases = sorted
+      .slice(index)
+      .map((phase) => ({ ...phase, start: phase.start - skip + settings.COUNTDOWN }));
+
+    this.targets = beatmap.notes
+      .filter((note) => note.t >= skip)
+      .map((note, i) => {
+      const t = note.t - skip + settings.COUNTDOWN;
       const phaseIndex = this.phaseIndexAt(t);
       const phase = this.phases[phaseIndex];
       const windowScale = phase?.hitWindowScale ?? 1;
@@ -210,7 +224,7 @@ export class GameEngine {
     this.phaseEventId += 1;
     this.t0 = startAt ?? this.clock();
     this.publish();
-    this.onPhaseChange?.(0, this.phases[0]);
+    this.onPhaseChange?.(this.startPhase, this.phases[0]);
   }
 
   /** Index of the phase active at game time `t` (countdown included). */
@@ -354,7 +368,7 @@ export class GameEngine {
       this.phaseIndex = phaseIndex;
       this.phaseEventId += 1;
       this.snapshotDirty = true;
-      this.onPhaseChange?.(phaseIndex, this.phases[phaseIndex]);
+      this.onPhaseChange?.(this.startPhase + phaseIndex, this.phases[phaseIndex]);
     }
 
     for (const target of this.targets) {
