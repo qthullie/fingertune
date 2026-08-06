@@ -35,6 +35,18 @@ judged in tens of milliseconds.
 Everything runs **on-device**: inference is WebAssembly + GPU delegate inside the
 tab. No frame, no landmark, no score ever leaves the machine.
 
+> ### This pipeline is not a demo. It ships.
+>
+> The hand tracking that navigates my portfolio —
+> **[qthullie.github.io](https://qthullie.github.io/)** — is this project's code.
+> Same MediaPipe Hand Landmarker, same One-Euro filter, same hysteresis pinch
+> state machine. Point at the page, pinch to click. **The technology that drives
+> the navigation of that portfolio is the technology of this repository.**
+>
+> A rhythm game is the hardest possible test bench for a gesture recogniser: a
+> UI forgives 200 ms of latency, a beat does not. Tune it until it is playable
+> and you get an input method that feels instant everywhere else.
+
 ## Table of contents
 
 - [The recognition pipeline](#the-recognition-pipeline)
@@ -44,6 +56,7 @@ tab. No frame, no landmark, no score ever leaves the machine.
   - [4. Coordinate spaces](#4-coordinate-spaces)
   - [5. Timing and latency](#5-timing-and-latency)
   - [Tuning and diagnosis](#tuning-and-diagnosis)
+- [Beyond the game: pinch as a pointing device](#beyond-the-game-pinch-as-a-pointing-device)
 - [The game around it](#the-game-around-it)
 - [Quick start](#quick-start)
 - [Project layout](#project-layout)
@@ -219,6 +232,46 @@ live, without a reload:
 fingertune.settings.PINCH_ON_RATIO = 0.35;
 fingertune.settings.DEBUG = true;
 ```
+
+---
+
+## Beyond the game: pinch as a pointing device
+
+Strip the beatmap away and what is left is a **pointing device**: a cursor with
+sub-pixel stability and a click event with a rising edge, a dead band and a
+cooldown. That is exactly the contract a mouse offers — and it is what powers the
+navigation of **[qthullie.github.io](https://qthullie.github.io/)**.
+
+The port needed no rewrite of the recognition itself, only a different consumer
+of the same three signals:
+
+| Signal from `lib/handTracking.ts` | In Fingertune | On the portfolio |
+| --- | --- | --- |
+| `cursor` (smoothed thumb–index midpoint) | aim at the target | move the pointer |
+| `justPinched` (rising edge) | hit a circle, grab a slider head | click a link |
+| `pinching` (held state) | follow a slider ball | drag, scroll, hold |
+
+Two pieces do the heavy lifting, and both are here for the reading:
+
+- **[`lib/oneEuro.ts`](src/lib/oneEuro.ts)** — the reason the cursor does not
+  shiver while you read, and does not lag while you reach across the page. A
+  fixed low-pass forces you to choose one or the other; the One-Euro filter's
+  speed-adaptive cutoff refuses the choice.
+- **the hysteresis + cooldown state machine** in
+  [`lib/handTracking.ts`](src/lib/handTracking.ts) — the reason a click is one
+  click. A single threshold flickers on noise and fires phantom clicks; that is
+  merely annoying in a game and unusable in a navigation.
+
+The scale-invariant pinch ratio matters just as much outside the game: a visitor
+sits wherever they sit, and the threshold has to hold at 40 cm and at 1.5 m
+without a calibration step. Dividing by the wrist–MCP palm segment gives that for
+free.
+
+So the honest summary is the inverse of how it looks. The rhythm game is not the
+product with a side effect; it is the **test harness**, deliberately the most
+demanding consumer of the pipeline, because a note judged to ±60 ms exposes every
+millisecond of latency and every false trigger that a web page would quietly
+absorb. Pass here and the browser UI is easy.
 
 ---
 
