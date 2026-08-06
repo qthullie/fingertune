@@ -2,7 +2,7 @@
 
 export type Grade = 'PERFECT' | 'GOOD' | 'MISS';
 
-export type GamePhase = 'idle' | 'playing' | 'finished';
+export type GamePhase = 'idle' | 'playing' | 'paused' | 'finished';
 
 /**
  * What a note asks for.
@@ -134,6 +134,8 @@ export interface GameSnapshot {
   duration: number;
   /** At least one hand is being tracked. */
   handVisible: boolean;
+  /** True when the pause was triggered by losing the hand, not by the player. */
+  autoPaused: boolean;
   /** Number of hands currently tracked. */
   handCount: number;
   /** Current beatmap phase. */

@@ -4,6 +4,7 @@ import { Hud } from './components/Hud';
 import { StartScreen } from './components/StartScreen';
 import { ErrorScreen } from './components/ErrorScreen';
 import { EndScreen } from './components/EndScreen';
+import { PauseScreen } from './components/PauseScreen';
 import { GameEngine } from './game/engine';
 import { HandTracker } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
@@ -47,6 +48,8 @@ export function App(): JSX.Element {
         onSliderTick: () => audio.playSliderTick(),
         // The soundtrack steps up on every phase.
         onPhaseChange: (index) => audio.setIntensity(index),
+        onPause: () => audio.pauseMusic(),
+        onResume: (at) => audio.resumeMusic(at),
         onFinish: () => {
           const final = engine.getSnapshot();
           const result = submitScore(defaultBeatmap.id, {
@@ -102,6 +105,13 @@ export function App(): JSX.Element {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
       const key = e.key.toLowerCase();
+      // Space is the one binding that must not also scroll the page.
+      if (key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        engine.togglePause();
+        return;
+      }
+      if (key === 'escape') engine.pause();
       if (key === 'r' && tracker.cameraReady) startRun();
       if (key === 'm') settings.METRONOME_ON = !settings.METRONOME_ON;
       if (key === 'd') settings.DEBUG = !settings.DEBUG;
@@ -141,6 +151,13 @@ export function App(): JSX.Element {
       )}
       {uiPhase === 'error' && error && (
         <ErrorScreen message={error.message} detail={error.detail} onRetry={handleRetry} />
+      )}
+      {uiPhase === 'playing' && snapshot.phase === 'paused' && (
+        <PauseScreen
+          auto={snapshot.autoPaused}
+          onResume={() => engine.resume()}
+          onRestart={startRun}
+        />
       )}
       {uiPhase === 'end' && <EndScreen snapshot={snapshot} record={record} onReplay={startRun} />}
     </div>

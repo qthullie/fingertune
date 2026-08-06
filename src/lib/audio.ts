@@ -280,6 +280,33 @@ export class AudioEngine {
     this.player?.stop();
   }
 
+  /**
+   * Holds the music where it is.
+   *
+   * `Tone.Transport.pause()` keeps its position, so the generated track resumes
+   * mid-bar rather than restarting the arrangement. A `Player` has no pause, so
+   * it is stopped and restarted from an offset -- see `resumeMusic`.
+   */
+  pauseMusic(): void {
+    Tone.Transport.pause();
+    this.player?.stop();
+  }
+
+  /**
+   * Picks the music back up in step with the run.
+   *
+   * @param atTime game time the engine is resuming at, countdown included.
+   *               The music starts at the end of the countdown, so the offset
+   *               into the track is that much less.
+   */
+  resumeMusic(atTime: number): void {
+    Tone.Transport.start();
+    if (this.player) {
+      const offset = Math.max(0, atTime - settings.COUNTDOWN);
+      this.player.start(undefined, offset);
+    }
+  }
+
   /** Steps the arrangement up (called on a phase change). */
   setIntensity(level: number): void {
     this.intensity = Math.max(0, Math.min(2, level));

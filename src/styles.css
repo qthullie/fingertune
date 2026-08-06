@@ -154,6 +154,29 @@ button:disabled {
   cursor: progress;
 }
 
+/* Secondary action: present, but never competing with the primary one. */
+.button--ghost {
+  font-size: 15px;
+  padding: 10px 22px;
+  color: var(--fg, #e8e8f4);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/*
+ * The pause overlay sits over a live run, so it stays translucent: seeing the
+ * frozen playfield behind it is what makes it read as "held" rather than
+ * "over". The blur keeps the text legible without hiding the game.
+ */
+.overlay--pause {
+  background: rgba(9, 9, 20, 0.82);
+  backdrop-filter: blur(6px);
+}
+
 .error {
   max-width: 620px;
   font-size: 15px;

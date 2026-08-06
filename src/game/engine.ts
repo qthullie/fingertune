@@ -44,6 +44,9 @@ export class GameEngine {
   private eventId = 0;
   private handVisible = false;
   private handCount = 0;
+  private autoPaused = false;
+  /** Seconds the hand has been missing, for the auto-pause. */
+  private handLostFor = 0;
   private phaseIndex = 0;
   private phaseEventId = 0;
   /** Phases shifted by the countdown, ready to compare against `time`. */
@@ -56,6 +59,8 @@ export class GameEngine {
   private onSliderTick: (() => void) | null = null;
   private onPhaseChange: ((index: number, phase: BeatmapPhase | undefined) => void) | null = null;
   private onFinish: (() => void) | null = null;
+  private onPause: (() => void) | null = null;
+  private onResume: ((atTime: number) => void) | null = null;
 
   private listeners = new Set<Listener>();
   private snapshotCache: GameSnapshot = this.buildSnapshot();
@@ -91,6 +96,7 @@ export class GameEngine {
       time: Math.round(this.time / TIME_QUANTUM) * TIME_QUANTUM,
       duration: this.duration,
       handVisible: this.handVisible,
+      autoPaused: this.autoPaused,
     };
   }
 
@@ -110,6 +116,9 @@ export class GameEngine {
     onSliderTick: () => void;
     onPhaseChange: (index: number, phase: BeatmapPhase | undefined) => void;
     onFinish: () => void;
+    onPause?: () => void;
+    /** @param atTime the game time the run resumes at, rewind included. */
+    onResume?: (atTime: number) => void;
   }): void {
     this.clock = options.clock;
     this.onHitSound = options.onHitSound;
@@ -117,6 +126,8 @@ export class GameEngine {
     this.onSliderTick = options.onSliderTick;
     this.onPhaseChange = options.onPhaseChange;
     this.onFinish = options.onFinish;
+    this.onPause = options.onPause ?? null;
+    this.onResume = options.onResume ?? null;
   }
 
   /** Number of tracked hands, reported by the render loop. */
@@ -193,6 +204,8 @@ export class GameEngine {
     this.lastOffsetMs = 0;
     this.time = 0;
     this.phase = 'playing';
+    this.autoPaused = false;
+    this.handLostFor = 0;
     this.phaseIndex = 0;
     this.phaseEventId += 1;
     this.t0 = startAt ?? this.clock();
@@ -261,14 +274,78 @@ export class GameEngine {
   }
 
   /**
+   * Freezes the run.
+   *
+   * Game time is `clock() - t0` against an audio clock that never stops, so
+   * pausing is not a matter of stopping anything: `time` simply stops being
+   * recomputed, and resuming rebases `t0` on whatever the clock says then.
+   * Nothing drifts, because nothing was integrating.
+   *
+   * @param auto true when the hand was lost rather than the player asking.
+   */
+  pause(auto = false): void {
+    if (this.phase !== 'playing') return;
+    this.phase = 'paused';
+    this.autoPaused = auto;
+    this.onPause?.();
+    this.publish();
+  }
+
+  /**
+   * Resumes, a beat or so before where it stopped.
+   *
+   * Dropping the player back exactly where they left off hands them a note
+   * already halfway under its ring, which reads as the game cheating. Targets
+   * already judged carry `dead`, so rewinding replays empty space rather than
+   * re-judging anything.
+   */
+  resume(): void {
+    if (this.phase !== 'paused') return;
+    const at = Math.max(0, this.time - settings.RESUME_REWIND);
+    this.time = at;
+    this.t0 = this.clock() - at;
+    this.autoPaused = false;
+    this.handLostFor = 0;
+    this.phase = 'playing';
+    this.onResume?.(at);
+    this.publish();
+  }
+
+  togglePause(): void {
+    if (this.phase === 'playing') this.pause();
+    else if (this.phase === 'paused') this.resume();
+  }
+
+  /**
    * Turns overdue targets into misses, ages the effects, publishes the snapshot.
    * @param dt render seconds elapsed (particles only).
    */
   update(dt: number): void {
+    if (this.phase === 'paused') {
+      // A run paused *for* the player resumes on its own when the reason goes
+      // away. Making them find a key to undo something they never chose would
+      // be a second interruption on top of the first.
+      if (this.autoPaused && this.handVisible) this.resume();
+      else if (this.snapshotDirty) this.publish();
+      return;
+    }
+
     if (this.phase !== 'playing') {
       this.effects.update(dt);
       if (this.snapshotDirty) this.publish();
       return;
+    }
+
+    // Auto-pause. Judged against render time rather than a frame count, so it
+    // means the same thing on a 30 fps laptop as on a 144 Hz screen.
+    if (this.handVisible) {
+      this.handLostFor = 0;
+    } else {
+      this.handLostFor += dt;
+      if (this.handLostFor > settings.AUTO_PAUSE_AFTER) {
+        this.pause(true);
+        return;
+      }
     }
 
     // Phase change: banner plus a step up in musical intensity.
