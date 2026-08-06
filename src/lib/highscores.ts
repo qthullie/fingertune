@@ -74,10 +74,3 @@ export function submitScore(beatmapId: string, run: Omit<BestScore, 'date'>): Re
   writeStore(store);
   return { isRecord: true, previous, best };
 }
-
-/** Clears a beatmap's record (handy from the console). */
-export function clearBest(beatmapId: string): void {
-  const store = readStore();
-  delete store[beatmapId];
-  writeStore(store);
-}
