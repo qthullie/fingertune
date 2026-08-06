@@ -91,6 +91,24 @@ export interface Settings {
   MUSIC_VOLUME: number;
   /** Tracking debug overlay (key D in game). */
   DEBUG: boolean;
+
+  /* ---- Pause ------------------------------------------------------------ */
+  /**
+   * Seconds without a tracked hand before the run pauses itself.
+   *
+   * Losing the hand is not the same as playing badly: someone walks into frame,
+   * you reach for a glass, the lighting shifts. Judging notes nobody could see
+   * turns a run into a scoreboard of things that were never attempted.
+   */
+  AUTO_PAUSE_AFTER: number;
+  /**
+   * Seconds rewound when a run resumes.
+   *
+   * Coming back to a note already halfway under its approach ring is
+   * unplayable. The run was interrupted, not failed, so it gives back the beat
+   * it takes to read the screen again.
+   */
+  RESUME_REWIND: number;
 }
 
 export const settings: Settings = {
@@ -122,7 +140,7 @@ export const settings: Settings = {
   OEF_BETA: 0.02,
   OEF_D_CUTOFF: 1.0,
 
-  MAX_HANDS: 1,
+  MAX_HANDS: 2,
   MIN_DETECTION_CONF: 0.5,
   MIN_PRESENCE_CONF: 0.5,
   MIN_TRACKING_CONF: 0.5,
@@ -133,6 +151,8 @@ export const settings: Settings = {
   SHOW_PLAYFIELD: false,
   COUNTDOWN: 3.0,
   METRONOME_ON: false,
+  AUTO_PAUSE_AFTER: 1.5,
+  RESUME_REWIND: 1.2,
   MASTER_VOLUME: -6,
   MUSIC_VOLUME: -8,
   DEBUG: false,

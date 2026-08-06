@@ -154,6 +154,29 @@ button:disabled {
   cursor: progress;
 }
 
+/* Secondary action: present, but never competing with the primary one. */
+.button--ghost {
+  font-size: 15px;
+  padding: 10px 22px;
+  color: var(--fg, #e8e8f4);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/*
+ * The pause overlay sits over a live run, so it stays translucent: seeing the
+ * frozen playfield behind it is what makes it read as "held" rather than
+ * "over". The blur keeps the text legible without hiding the game.
+ */
+.overlay--pause {
+  background: rgba(9, 9, 20, 0.82);
+  backdrop-filter: blur(6px);
+}
+
 .error {
   max-width: 620px;
   font-size: 15px;
@@ -438,4 +461,253 @@ kbd {
   height: 100%;
   background: var(--accent-a);
   transition: width 0.1s linear;
+}
+
+
+/* --------------------------------------------------------------------------
+   Pickers (beatmap and starting phase)
+   -------------------------------------------------------------------------- */
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* One beatmap. Reset the global button styling first: these are choices, not
+   calls to action, and the gradient pill would make three of them shout over
+   the one button on the screen that actually starts the game. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 150px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+
+.card:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.card--active {
+  background: rgba(77, 216, 255, 0.12);
+  border-color: var(--accent-a, #4dd8ff);
+}
+
+.card-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.card-meta,
+.card-best {
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+.card--active .card-best {
+  opacity: 0.85;
+}
+
+.chip {
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+}
+
+.chip:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chip--active {
+  color: #06060c;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+  border-color: transparent;
+}
+
+/* The start screen now has real content, so it scrolls rather than clipping
+   on a short window -- a laptop at 720p must still reach the Play button. */
+.overlay--start {
+  justify-content: flex-start;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+
+/* --------------------------------------------------------------------------
+   Target score (challenge, or your own best)
+   -------------------------------------------------------------------------- */
+
+.hud-target {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+
+.hud-target-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.hud-target-value {
+  font-weight: 600;
+}
+
+/* Red while behind, green once ahead. The delta is the only number here that
+   changes meaning rather than magnitude, so it is the only one that changes
+   colour -- the score itself must never look like a judgement. */
+.hud-target-delta {
+  font-weight: 700;
+  color: #ff5566;
+}
+
+.hud-target--ahead {
+  opacity: 1;
+}
+
+.hud-target--ahead .hud-target-delta {
+  color: #4dffb0;
+}
+
+
+/* --------------------------------------------------------------------------
+   Calibration
+   -------------------------------------------------------------------------- */
+
+/* The live ratio. Wide and central on purpose: it is the proof that the camera
+   can see the hand, which is the question the player is actually asking. */
+.calib-bar {
+  width: min(420px, 80vw);
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.calib-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+  /* No transition: this is a measurement, and smoothing it would hide the
+     jitter the player needs to see. */
+}
+
+.calib-progress {
+  width: min(420px, 80vw);
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.calib-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+
+/* --------------------------------------------------------------------------
+   Custom music
+   -------------------------------------------------------------------------- */
+
+/* Collapsed by default. Most players want the generated track and should not
+   have to scroll past a file picker to reach the Play button. */
+.music {
+  width: min(460px, 88vw);
+  text-align: left;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+}
+
+.music > summary {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.music > summary::-webkit-details-marker {
+  display: none;
+}
+
+.music > summary::before {
+  content: '♪ ';
+  opacity: 0.6;
+}
+
+.music-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 14px;
+}
+
+/* The native file input is unstyleable and says "No file chosen" in whatever
+   language the browser feels like; the label carries the real state instead. */
+.music-file input {
+  display: none;
+}
+
+.music-file span {
+  display: block;
+  padding: 9px 14px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.music-file span:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.music-bpm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.music-bpm input {
+  width: 74px;
+  margin-left: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+}
+
+
+/* Secondary actions on the pause overlay, side by side so neither reads as
+   the default. Wraps on a narrow window rather than overflowing. */
+.pause-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
 }

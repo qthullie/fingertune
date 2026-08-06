@@ -303,6 +303,43 @@ The soundtrack is synthesised by Tone.js on the same transport and grows with
 each phase; misses are audible; the best score per beatmap is kept in
 `localStorage`.
 
+**Three beatmaps**, each built around removing something. *Demo* teaches both
+note kinds at a pace that forgives everything. *Pulse* (140 BPM) has no sliders
+at all, so nothing asks you to hold a pinch and the notes sit far closer
+together — a map about timing and nothing else. *Drift* (100 BPM) is almost all
+sliders, which is a test of holding a pinch steady while the whole hand travels,
+and that is where the One-Euro filter is least certain. Neither is harder than
+the other; they fail for different reasons.
+
+**A run can start at any phase.** Everything before it is dropped and the rest
+slides back to zero, so starting at the last phase is a real run at that
+difficulty rather than a fast-forward.
+
+**Losing your hand pauses the run** instead of judging notes nobody could see,
+and it resumes on its own when the hand comes back — a beat earlier than it
+stopped, because being dropped back onto a note already under its ring reads as
+the game cheating. <kbd>Space</kbd> pauses deliberately.
+
+**The pinch thresholds are measured, not assumed.** Normalising by hand size
+removes the distance to the camera but not the hand: finger length against palm
+width varies enough that a threshold comfortable for one player is unreachable
+for another. Six seconds of opening and closing sets `PINCH_ON_RATIO` and
+`PINCH_OFF_RATIO` from the player's own range, using the 10th and 90th
+percentiles so one bad frame cannot set the scale — and refusing outright, with
+the defaults left in place, when the sweep is too narrow to mean anything.
+
+**Scores are shareable without a server.** The end screen copies the run plus a
+link of the form `#c=<map>.<score>`, which opens the game on that map with that
+score to beat and shows it in the HUD with a live signed delta. A fragment, so
+it never reaches a server; not tamper-proof, and not meant to be — anyone who
+edits it has beaten themselves at a game nobody was refereeing.
+
+**You can play over your own track.** A local file, through
+`URL.createObjectURL`, so the audio never leaves the machine, with tap tempo to
+match the BPM. The beatmap keeps its own grid and nothing detects the first
+downbeat, so a track that does not start on one will sit at a constant offset —
+this is a tool for getting close, not a sync.
+
 Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
 `duration` for sliders) and phase definitions — in
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
