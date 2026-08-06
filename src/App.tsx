@@ -151,6 +151,14 @@ export function App(): JSX.Element {
     }
   }, [startRun]);
 
+  /** Leaves a run without scoring it, back to the menu. */
+  const quitToMenu = useCallback(() => {
+    engine.abandon();
+    audio.stopMusic();
+    setRecord(null);
+    setUiPhase('start');
+  }, []);
+
   const handleRetry = useCallback(() => {
     setError(null);
     setUiPhase('start');
@@ -166,7 +174,12 @@ export function App(): JSX.Element {
         engine.togglePause();
         return;
       }
-      if (key === 'escape') engine.pause();
+      // Escape pauses a run, and leaves an already-paused one. Two presses to
+      // get out, which is the right number for something that discards a run.
+      if (key === 'escape') {
+        if (engine.phase === 'paused') quitToMenu();
+        else engine.pause();
+      }
       if (key === 'r' && tracker.cameraReady) startRun();
       if (key === 'm') settings.METRONOME_ON = !settings.METRONOME_ON;
       if (key === 'd') settings.DEBUG = !settings.DEBUG;
@@ -176,7 +189,7 @@ export function App(): JSX.Element {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [startRun]);
+  }, [startRun, quitToMenu]);
 
   /* Stop the music when the run ends. */
   useEffect(() => {
@@ -263,6 +276,7 @@ export function App(): JSX.Element {
           auto={snapshot.autoPaused}
           onResume={() => engine.resume()}
           onRestart={startRun}
+          onQuit={quitToMenu}
         />
       )}
       {uiPhase === 'end' && (
@@ -272,7 +286,7 @@ export function App(): JSX.Element {
           record={record}
           challengeScore={challengeApplies ? challenge.score : null}
           onReplay={startRun}
-          onBackToMenu={() => setUiPhase('start')}
+          onBackToMenu={quitToMenu}
         />
       )}
     </div>

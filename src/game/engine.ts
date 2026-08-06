@@ -325,6 +325,26 @@ export class GameEngine {
     this.publish();
   }
 
+  /**
+   * Ends the run without judging it.
+   *
+   * Distinct from `finish()`, which is a run reaching its end and therefore
+   * produces a score. Walking out halfway has no score to submit -- writing one
+   * would put an abandoned attempt into the high-score table, and the number
+   * that matters most on this screen is the one you can trust.
+   *
+   * Targets are dropped so the canvas has nothing left to draw behind the menu.
+   */
+  abandon(): void {
+    if (this.phase === 'idle') return;
+    this.phase = 'idle';
+    this.autoPaused = false;
+    this.handLostFor = 0;
+    this.targets = [];
+    this.effects.clear();
+    this.publish();
+  }
+
   togglePause(): void {
     if (this.phase === 'playing') this.pause();
     else if (this.phase === 'paused') this.resume();

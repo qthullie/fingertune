@@ -3,6 +3,7 @@ interface Props {
   auto: boolean;
   onResume: () => void;
   onRestart: () => void;
+  onQuit: () => void;
 }
 
 /**
@@ -18,7 +19,7 @@ interface Props {
  * something that is about to happen anyway invites people to reach for the
  * mouse -- with the hand the game is waiting for.
  */
-export function PauseScreen({ auto, onResume, onRestart }: Props): JSX.Element {
+export function PauseScreen({ auto, onResume, onRestart, onQuit }: Props): JSX.Element {
   return (
     <div className="overlay overlay--pause">
       <h1 className="title">{auto ? 'Hand lost' : 'Paused'}</h1>
@@ -42,12 +43,22 @@ export function PauseScreen({ auto, onResume, onRestart }: Props): JSX.Element {
       )}
 
       <p className="small">
-        <kbd>Space</kbd> {auto ? 'resume now' : 'resume'} · <kbd>R</kbd> restart
+        <kbd>Space</kbd> {auto ? 'resume now' : 'resume'} · <kbd>R</kbd> restart ·{' '}
+        <kbd>Esc</kbd> menu
       </p>
 
-      <button type="button" className="button--ghost" onClick={onRestart}>
-        Restart the run
-      </button>
+      <div className="pause-actions">
+        <button type="button" className="button--ghost" onClick={onRestart}>
+          Restart the run
+        </button>
+        {/* The way out. A paused run had no exit at all: the only routes back to
+            the menu were finishing it or reloading the page, which is a strange
+            thing to ask of someone who has just stopped because they need to be
+            somewhere else. */}
+        <button type="button" className="button--ghost" onClick={onQuit}>
+          Back to menu
+        </button>
+      </div>
     </div>
   );
 }

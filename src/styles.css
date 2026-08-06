@@ -701,3 +701,13 @@ kbd {
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
 }
+
+
+/* Secondary actions on the pause overlay, side by side so neither reads as
+   the default. Wraps on a narrow window rather than overflowing. */
+.pause-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
