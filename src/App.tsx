@@ -10,7 +10,8 @@ import { HandTracker } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
 import { explainError, type FriendlyError } from './lib/errors';
 import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/highscores';
-import { beatmaps, defaultBeatmap } from './beatmaps';
+import { beatmaps, defaultBeatmap, findBeatmap } from './beatmaps';
+import { parseChallenge } from './lib/challenge';
 import type { Beatmap } from './game/types';
 import { assets, settings } from './config/settings';
 
@@ -32,9 +33,16 @@ export function App(): JSX.Element {
   const [status, setStatus] = useState('Hand-tracking model not loaded yet (~7 MB on first run).');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
-  const [beatmap, setBeatmap] = useState<Beatmap>(defaultBeatmap);
+  /* A challenge link picks the map and the score to chase before anything
+     renders, so the player never sees the wrong map selected for a frame. */
+  const [challenge] = useState(() => parseChallenge(window.location.hash));
+  const [beatmap, setBeatmap] = useState<Beatmap>(
+    () => findBeatmap(challenge?.beatmapId) ?? defaultBeatmap,
+  );
   const [startPhase, setStartPhase] = useState(0);
-  const [best, setBest] = useState<BestScore | null>(() => loadBest(defaultBeatmap.id));
+  const [best, setBest] = useState<BestScore | null>(() =>
+    loadBest(findBeatmap(challenge?.beatmapId)?.id ?? defaultBeatmap.id),
+  );
   const [record, setRecord] = useState<RecordResult | null>(null);
   const configuredRef = useRef(false);
   /* `configure` is called once and captures its callbacks, but the selected map
@@ -46,6 +54,15 @@ export function App(): JSX.Element {
   phaseRef.current = startPhase;
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
+
+  /* A challenge outranks a personal best: someone sent that number on purpose,
+     and racing two figures at once is racing neither. */
+  const challengeApplies = challenge !== null && challenge.beatmapId === beatmap.id;
+  const target = challengeApplies
+    ? { score: challenge.score, label: 'Challenge' }
+    : best
+      ? { score: best.score, label: 'Your best' }
+      : null;
 
   /** Starts a run (assumes model, camera and audio are ready). */
   const startRun = useCallback(() => {
@@ -149,7 +166,7 @@ export function App(): JSX.Element {
   return (
     <div className="app">
       <GameCanvas engine={engine} tracker={tracker} active={uiPhase === 'playing'} />
-      <Hud snapshot={snapshot} />
+      <Hud snapshot={snapshot} target={target} />
 
       {uiPhase === 'start' && (
         <StartScreen
@@ -178,7 +195,16 @@ export function App(): JSX.Element {
           onRestart={startRun}
         />
       )}
-      {uiPhase === 'end' && <EndScreen snapshot={snapshot} record={record} onReplay={startRun} />}
+      {uiPhase === 'end' && (
+        <EndScreen
+          snapshot={snapshot}
+          beatmap={beatmap}
+          record={record}
+          challengeScore={challengeApplies ? challenge.score : null}
+          onReplay={startRun}
+          onBackToMenu={() => setUiPhase('start')}
+        />
+      )}
     </div>
   );
 }
