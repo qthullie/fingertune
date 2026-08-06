@@ -192,7 +192,15 @@ export function App(): JSX.Element {
 
   return (
     <div className="app">
-      <GameCanvas engine={engine} tracker={tracker} active={uiPhase === 'playing'} />
+      <GameCanvas
+        engine={engine}
+        tracker={tracker}
+        /* Calibration reads `tracker.hands[0].ratio` every frame, and the only
+           thing that calls `tracker.detect()` is this loop. Leaving it off
+           during calibration meant sampling a value that never changed, so the
+           sweep was always too narrow and the screen always refused. */
+        active={uiPhase === 'playing' || uiPhase === 'calibrating'}
+      />
       <Hud snapshot={snapshot} target={target} />
 
       {uiPhase === 'start' && (

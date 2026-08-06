@@ -72,6 +72,7 @@ export function StartScreen({
               <span className="card-title">{beatmap.title}</span>
               <span className="card-meta">
                 {beatmap.bpm} BPM · {beatmap.notes.length} notes
+                {beatmap.notes.some((n) => n.hand) ? ' · two hands' : ''}
               </span>
               <span className="card-best">
                 {mapBest ? `Best ${mapBest.score.toLocaleString()}` : 'Never played'}

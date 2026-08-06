@@ -350,9 +350,13 @@ export class GameEngine {
       return;
     }
 
-    // Auto-pause. Judged against render time rather than a frame count, so it
-    // means the same thing on a 30 fps laptop as on a 144 Hz screen.
-    if (this.handVisible) {
+    /* Auto-pause. Judged against render time rather than a frame count, so it
+       means the same thing on a 30 fps laptop as on a 144 Hz screen.
+
+       Not during the countdown: that is precisely the moment a hand is still
+       on its way up, and pausing there means the run stops itself before it
+       has begun -- which reads as the game being broken, not as a courtesy. */
+    if (this.handVisible || this.time < settings.COUNTDOWN) {
       this.handLostFor = 0;
     } else {
       this.handLostFor += dt;

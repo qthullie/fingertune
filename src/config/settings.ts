@@ -140,7 +140,7 @@ export const settings: Settings = {
   OEF_BETA: 0.02,
   OEF_D_CUTOFF: 1.0,
 
-  MAX_HANDS: 1,
+  MAX_HANDS: 2,
   MIN_DETECTION_CONF: 0.5,
   MIN_PRESENCE_CONF: 0.5,
   MIN_TRACKING_CONF: 0.5,
