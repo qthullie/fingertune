@@ -589,3 +589,38 @@ kbd {
 .hud-target--ahead .hud-target-delta {
   color: #4dffb0;
 }
+
+
+/* --------------------------------------------------------------------------
+   Calibration
+   -------------------------------------------------------------------------- */
+
+/* The live ratio. Wide and central on purpose: it is the proof that the camera
+   can see the hand, which is the question the player is actually asking. */
+.calib-bar {
+  width: min(420px, 80vw);
+  height: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.calib-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+  /* No transition: this is a measurement, and smoothing it would hide the
+     jitter the player needs to see. */
+}
+
+.calib-progress {
+  width: min(420px, 80vw);
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.calib-progress-fill {
+  height: 100%;
+  background: rgba(255, 255, 255, 0.45);
+}

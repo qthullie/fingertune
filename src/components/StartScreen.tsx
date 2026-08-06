@@ -15,6 +15,9 @@ interface Props {
   loading: boolean;
   /** Local best score on the selected beatmap, or null. */
   best: BestScore | null;
+  /** False until this hand's pinch range has been measured. */
+  calibrated: boolean;
+  onRecalibrate: () => void;
   onStart: () => void;
 }
 
@@ -36,6 +39,8 @@ export function StartScreen({
   status,
   loading,
   best,
+  calibrated,
+  onRecalibrate,
   onStart,
 }: Props): JSX.Element {
   return (
@@ -131,6 +136,16 @@ export function StartScreen({
       <button type="button" onClick={onStart} disabled={loading}>
         {loading ? 'Loading…' : 'Allow webcam / Play'}
       </button>
+
+      {/* A different chair, a different webcam, a different hand: the measured
+          range stops matching, and there has to be a way back to it that is
+          not clearing site data. */}
+      {calibrated && (
+        <button type="button" className="button--ghost" onClick={onRecalibrate}>
+          Recalibrate my pinch
+        </button>
+      )}
+
       <p className="small">{status}</p>
     </div>
   );

@@ -12,6 +12,8 @@ import { explainError, type FriendlyError } from './lib/errors';
 import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/highscores';
 import { beatmaps, defaultBeatmap, findBeatmap } from './beatmaps';
 import { parseChallenge } from './lib/challenge';
+import { CalibrationScreen } from './components/CalibrationScreen';
+import { clearCalibration, loadCalibration } from './lib/calibration';
 import type { Beatmap } from './game/types';
 import { assets, settings } from './config/settings';
 
@@ -26,7 +28,16 @@ const engine = new GameEngine();
 const tracker = new HandTracker();
 const audio = new AudioEngine();
 
-type UiPhase = 'start' | 'playing' | 'end' | 'error';
+type UiPhase = 'start' | 'calibrating' | 'playing' | 'end' | 'error';
+
+/* Thresholds measured on a previous visit. A hand does not change between
+   sessions, so applying them before anything renders means a returning player
+   never sees the calibration screen again. */
+const storedCalibration = loadCalibration();
+if (storedCalibration) {
+  settings.PINCH_ON_RATIO = storedCalibration.onRatio;
+  settings.PINCH_OFF_RATIO = storedCalibration.offRatio;
+}
 
 export function App(): JSX.Element {
   const [uiPhase, setUiPhase] = useState<UiPhase>('start');
@@ -52,6 +63,9 @@ export function App(): JSX.Element {
   beatmapRef.current = beatmap;
   const phaseRef = useRef(startPhase);
   phaseRef.current = startPhase;
+  const [calibrate, setCalibrate] = useState(storedCalibration === null);
+  const calibrateRef = useRef(calibrate);
+  calibrateRef.current = calibrate;
 
   const snapshot = useSyncExternalStore(engine.subscribe, engine.getSnapshot);
 
@@ -114,7 +128,10 @@ export function App(): JSX.Element {
       await tracker.loadModel(setStatus);
       await tracker.startCamera(setStatus);
       setStatus('Ready.');
-      startRun();
+      // First visit: measure this hand before asking it to play. Everyone else
+      // goes straight in on the thresholds they already have.
+      if (calibrateRef.current) setUiPhase('calibrating');
+      else startRun();
     } catch (err) {
       console.error(err);
       setError(explainError(err));
@@ -179,10 +196,28 @@ export function App(): JSX.Element {
           }}
           startPhase={startPhase}
           onSelectPhase={setStartPhase}
+          calibrated={!calibrate}
+          onRecalibrate={() => {
+            clearCalibration();
+            setCalibrate(true);
+          }}
           status={status}
           loading={loading}
           best={best}
           onStart={() => void handleStart()}
+        />
+      )}
+      {uiPhase === 'calibrating' && (
+        <CalibrationScreen
+          tracker={tracker}
+          onDone={() => {
+            setCalibrate(false);
+            startRun();
+          }}
+          onSkip={() => {
+            setCalibrate(false);
+            startRun();
+          }}
         />
       )}
       {uiPhase === 'error' && error && (
