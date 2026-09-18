@@ -139,6 +139,17 @@ const en = {
   'hud.target.challenge': 'Challenge',
   'hud.privacy': 'Privacy mode — webcam hidden',
 
+  /* -- bring your own chart -- */
+  'chart.summary': 'Import a beatmap (osu! or StepMania)',
+  'chart.choose': 'Choose an .osz, .osu, .sm or .zip',
+  'chart.loading': 'Reading the chart…',
+  'chart.loaded': 'Loaded {label} — {notes} notes. Pick it in the list above.',
+  'chart.noAudio':
+    'No audio in the file: the chart asks for {file}. Add it with the music panel below.',
+  'chart.failed': 'Could not read that file.',
+  'chart.caveat':
+    'Converted, not emulated: osu! spinners are dropped and curved sliders are walked as straight segments; StepMania lanes become columns and the height is added by the importer. Nothing is uploaded — the archive is read in this tab.',
+
   /* -- music picker -- */
   'music.summary': 'Play over your own music',
   'music.choose': 'Choose an audio file',
@@ -313,6 +324,16 @@ const fr: Record<MessageKey, string> = {
   'hud.target.best': 'Votre record',
   'hud.target.challenge': 'Défi',
   'hud.privacy': 'Mode confidentialité — webcam masquée',
+
+  'chart.summary': 'Importer une beatmap (osu! ou StepMania)',
+  'chart.choose': 'Choisir un .osz, .osu, .sm ou .zip',
+  'chart.loading': 'Lecture de la carte…',
+  'chart.loaded': '{label} chargé — {notes} notes. Sélectionnez-la dans la liste ci-dessus.',
+  'chart.noAudio':
+    'Pas d’audio dans le fichier : la carte demande {file}. Ajoutez-le avec le panneau musique ci-dessous.',
+  'chart.failed': 'Impossible de lire ce fichier.',
+  'chart.caveat':
+    'Converti, pas émulé : les spinners osu! sont ignorés et les sliders courbes sont parcourus en segments droits ; les colonnes StepMania deviennent des colonnes à l’écran et la hauteur est ajoutée par l’import. Rien n’est envoyé — l’archive est lue dans cet onglet.',
 
   'music.summary': 'Jouer sur votre propre musique',
   'music.choose': 'Choisir un fichier audio',

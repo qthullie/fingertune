@@ -1116,6 +1116,14 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* An import that failed says why, in the words the parser used: "the archive
+   contains no chart" is actionable, "import failed" is not. */
+.chart-error {
+  color: var(--ink);
+  border-left: var(--px) solid var(--red);
+  padding-left: calc(var(--px) * 2);
+}
+
 /* Secondary actions on the pause overlay, side by side so neither reads as the
    default. Wraps on a narrow window rather than overflowing. */
 .pause-actions {
