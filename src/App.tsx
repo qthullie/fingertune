@@ -18,6 +18,7 @@ import { beatmaps, defaultBeatmap, findBeatmap } from './beatmaps';
 import { parseChallenge } from './lib/challenge';
 import { CalibrationScreen } from './components/CalibrationScreen';
 import { MusicPicker } from './components/MusicPicker';
+import { ChartImport } from './components/ChartImport';
 import { clearCalibration, loadCalibration } from './lib/calibration';
 import type { Beatmap } from './game/types';
 import { assets, settings } from './config/settings';
@@ -93,6 +94,12 @@ export function App(): JSX.Element {
   trackRef.current = track;
   const bpmRef = useRef(bpm);
   bpmRef.current = bpm;
+  /* Charts the player brought with them, newest first. They live beside the
+     built-in ones rather than replacing them: someone who imports a map still
+     wants Demo there to warm up on. */
+  const [imported, setImported] = useState<Beatmap[]>([]);
+  const catalogue = imported.length > 0 ? [...imported, ...beatmaps] : beatmaps;
+
   const [calibrate, setCalibrate] = useState(storedCalibration === null);
   const calibrateRef = useRef(calibrate);
   calibrateRef.current = calibrate;
@@ -251,7 +258,7 @@ export function App(): JSX.Element {
 
       {uiPhase === 'start' && (
         <StartScreen
-          beatmaps={beatmaps}
+          beatmaps={catalogue}
           selected={beatmap}
           onSelect={(next) => {
             setBeatmap(next);
@@ -261,6 +268,26 @@ export function App(): JSX.Element {
           }}
           startPhase={startPhase}
           onSelectPhase={setStartPhase}
+          chartImport={
+            <ChartImport
+              onImport={(chart, audioUrl, label) => {
+                setImported((previous) => [chart, ...previous.filter((m) => m.id !== chart.id)]);
+                setBeatmap(chart);
+                setStartPhase(0);
+                setBest(loadBest(chart.id));
+                // A chart that came with its own audio selects it too: the
+                // whole point of dropping one archive is not then having to
+                // find the track inside it by hand.
+                if (audioUrl) {
+                  setTrack({ url: audioUrl, name: label });
+                  setBpm(chart.bpm);
+                  void audio.loadTrack(audioUrl);
+                } else {
+                  setBpm(chart.bpm);
+                }
+              }}
+            />
+          }
           music={
             <MusicPicker
               trackName={track?.name ?? null}

@@ -65,6 +65,52 @@ export interface Settings {
   OEF_BETA: number;
   OEF_D_CUTOFF: number;
 
+  /* ---- Latency compensation ------------------------------------------------------
+     The pipeline reports where the hand WAS: the camera exposes a frame, ships
+     it, the model runs, and only then does the game hear about it. On a laptop
+     that round trip is 40-80 ms, and in a game judged to the millisecond the
+     cursor therefore trails the hand by a visible amount. */
+  /**
+   * Seconds to project the hand forward along its own velocity. 0 disables it.
+   *
+   * Dead reckoning: the One-Euro filter already keeps a smoothed derivative to
+   * choose its cutoff, and that estimate is reused here rather than computing a
+   * second one that would disagree with it.
+   *
+   * Tune it against your own machine, not against a number: press D, watch the
+   * reported offset on your hits. Consistently late means raise this;
+   * consistently early means lower it. Past ~0.12 the cursor starts leading the
+   * hand badly enough to feel possessed.
+   */
+  PREDICT_AHEAD: number;
+  /**
+   * Ceiling on a single frame's extrapolation, in normalised image units.
+   *
+   * Prediction fails in exactly one place: the instant the hand reverses. The
+   * velocity still points the old way, so the cursor is flung further in the
+   * wrong direction than the lag it was correcting. Capping the step bounds that
+   * error to something smaller than a target.
+   */
+  PREDICT_MAX_STEP: number;
+
+  /**
+   * Run MediaPipe in a Web Worker instead of on the render thread.
+   *
+   * `detectForVideo` is synchronous and costs 8-20 ms. Called from the render
+   * loop it eats most of a 60 fps frame budget, which is why the game used to
+   * be smooth until a hand appeared — the only moment that matters.
+   *
+   * Off by way of a flag rather than unconditionally, because the worker can be
+   * blocked by a COEP header or an extension; the tracker falls back to inline
+   * inference on its own when that happens, and `HandTracker.threaded` reports
+   * which path is live (press D).
+   *
+   * The trade is honest: a result arrives one hop later than the frame it
+   * describes. That is worth it only because latency is the part the game can
+   * compensate for — see PREDICT_AHEAD — while a dropped frame is gone.
+   */
+  THREADED_INFERENCE: boolean;
+
   /* ---- Hand tracking ------------------------------------------------------------- */
   /** Hands tracked. 1 by default; the whole pipeline already loops over N hands. */
   MAX_HANDS: number;
@@ -176,6 +222,11 @@ export const settings: Settings = {
   OEF_MIN_CUTOFF: 1.7,
   OEF_BETA: 0.02,
   OEF_D_CUTOFF: 1.0,
+
+  THREADED_INFERENCE: true,
+
+  PREDICT_AHEAD: 0.045,
+  PREDICT_MAX_STEP: 0.06,
 
   MAX_HANDS: 2,
   MIN_DETECTION_CONF: 0.5,
