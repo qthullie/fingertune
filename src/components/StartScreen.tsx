@@ -2,6 +2,10 @@ import logoUrl from '../../assets/logo.svg';
 import type { Beatmap } from '../game/types';
 import type { BestScore } from '../lib/highscores';
 import { loadBest } from '../lib/highscores';
+import { useT, type MessageKey } from '../lib/i18n';
+import { LangSwitch } from './LangSwitch';
+import { PrivacySwitch } from './PrivacySwitch';
+import { Rich } from './Rich';
 
 interface Props {
   beatmaps: ReadonlyArray<Beatmap>;
@@ -10,7 +14,7 @@ interface Props {
   /** Index into `selected.phases` the run will start from. */
   startPhase: number;
   onSelectPhase: (index: number) => void;
-  /** Progress message (model loading, webcam…). */
+  /** Progress message, already translated by the parent. */
   status: string;
   loading: boolean;
   /** Local best score on the selected beatmap, or null. */
@@ -20,8 +24,23 @@ interface Props {
   /** False until this hand's pinch range has been measured. */
   calibrated: boolean;
   onRecalibrate: () => void;
+  /** True when the webcam image will not be drawn. */
+  hideVideo: boolean;
+  onHideVideo: (hidden: boolean) => void;
   onStart: () => void;
 }
+
+/** The keyboard line, as pairs of key and what it does. */
+const SHORTCUTS: ReadonlyArray<readonly [string, MessageKey]> = [
+  ['Space', 'key.pause'],
+  ['R', 'key.replay'],
+  ['V', 'key.video'],
+  ['S', 'key.skeleton'],
+  ['M', 'key.metronome'],
+  ['P', 'key.gauge'],
+  ['F', 'key.playfield'],
+  ['D', 'key.debug'],
+];
 
 /**
  * Start screen. The button is required: browsers only allow the camera and the
@@ -44,22 +63,32 @@ export function StartScreen({
   music,
   calibrated,
   onRecalibrate,
+  hideVideo,
+  onHideVideo,
   onStart,
 }: Props): JSX.Element {
+  const t = useT();
+  const startPhaseName = selected.phases[startPhase];
+
   return (
     <div className="overlay overlay--start">
-      <img className="logo" src={logoUrl} alt="Fingertune" width={112} height={112} />
+      <div className="topbar">
+        <LangSwitch />
+        <PrivacySwitch hidden={hideVideo} onChange={onHideVideo} />
+      </div>
+
+      <img className="logo" src={logoUrl} alt="Fingertune" width={104} height={104} />
       <h1 className="title">FINGERTUNE</h1>
       <p className="subtitle">
-        A rhythm game played by <b>pinching</b>. Circles appear with an approach ring closing in
-        on them: pinch thumb and index the moment the ring meets the target.
+        <Rich>{t('start.tagline')}</Rich>
       </p>
 
       {/* --- map picker --------------------------------------------------- */}
-      <div className="picker" role="radiogroup" aria-label="Beatmap">
+      <div className="picker" role="radiogroup" aria-label={t('start.maps.label')}>
         {beatmaps.map((beatmap) => {
           const mapBest = loadBest(beatmap.id);
           const active = beatmap.id === selected.id;
+          const meta = t('start.card.meta', { bpm: beatmap.bpm, notes: beatmap.notes.length });
           return (
             <button
               key={beatmap.id}
@@ -69,13 +98,17 @@ export function StartScreen({
               className={`card${active ? ' card--active' : ''}`}
               onClick={() => onSelect(beatmap)}
             >
-              <span className="card-title">{beatmap.title}</span>
+              <span className="card-title">
+                {t.or(`map.${beatmap.id}.title`, beatmap.title)}
+              </span>
               <span className="card-meta">
-                {beatmap.bpm} BPM · {beatmap.notes.length} notes
-                {beatmap.notes.some((n) => n.hand) ? ' · two hands' : ''}
+                {meta}
+                {beatmap.notes.some((n) => n.hand) ? ` · ${t('start.card.twoHands')}` : ''}
               </span>
               <span className="card-best">
-                {mapBest ? `Best ${mapBest.score.toLocaleString()}` : 'Never played'}
+                {mapBest
+                  ? t('start.card.best', { score: t.n(mapBest.score) })
+                  : t('start.card.never')}
               </span>
             </button>
           );
@@ -87,7 +120,7 @@ export function StartScreen({
           the third one is a real run at that difficulty rather than a
           fast-forward. Someone who has cleared the map twice should not have
           to sit through the teaching section to reach the part they want. */}
-      <div className="picker picker--phases" role="radiogroup" aria-label="Starting difficulty">
+      <div className="picker" role="radiogroup" aria-label={t('start.phases.label')}>
         {selected.phases.map((phase, i) => (
           <button
             key={phase.id}
@@ -96,51 +129,65 @@ export function StartScreen({
             aria-checked={i === startPhase}
             className={`chip${i === startPhase ? ' chip--active' : ''}`}
             onClick={() => onSelectPhase(i)}
-            title={phase.hint}
+            title={t.or(`phase.${phase.id}.hint`, phase.hint)}
           >
-            {phase.name}
+            {t.or(`phase.${phase.id}.name`, phase.name)}
           </button>
         ))}
       </div>
-      {startPhase > 0 && (
+      {startPhase > 0 && startPhaseName && (
         <p className="small">
-          Starting at <b>{selected.phases[startPhase]?.name}</b> — scores from a partial run are
-          still saved.
+          <Rich>
+            {t('start.phaseNote', {
+              phase: t.or(`phase.${startPhaseName.id}.name`, startPhaseName.name),
+            })}
+          </Rich>
         </p>
       )}
 
       {best && (
         <div className="best-score">
-          <span className="best-score-label">Best score</span>
-          <span className="best-score-value">{best.score}</span>
+          <span className="best-score-label">{t('start.best.label')}</span>
+          <span className="best-score-value">{t.n(best.score)}</span>
           <span className="best-score-detail">
-            {best.accuracy.toFixed(2)} % · {best.maxCombo}x combo
+            {t('start.best.detail', {
+              accuracy: best.accuracy.toFixed(2),
+              combo: best.maxCombo,
+            })}
           </span>
         </div>
       )}
 
       <ul className="tips">
-        <li>Sit ~60–100 cm from the webcam, one hand clearly visible, palm to the camera.</li>
+        {(
+          [
+            'start.tip.sit',
+            'start.tip.hit',
+            'start.tip.slider',
+            'start.tip.pause',
+            'start.tip.privacy',
+          ] as const
+        ).map((key) => (
+          <li key={key}>
+            <Rich>{t(key)}</Rich>
+          </li>
+        ))}
         <li>
-          A hit is going from <b>fingers apart</b> to <b>fingers pinched</b> on the target.
-        </li>
-        <li>
-          <b>Sliders</b>: pinch the head, then <b>keep pinching</b> and drag along the track,
-          following the ball in the direction of the arrows, all the way to the end.
-        </li>
-        <li>
-          Lose your hand and the run <b>pauses itself</b> — bring it back and it carries on.
-        </li>
-        <li>
-          <kbd>Space</kbd> pause · <kbd>R</kbd> replay · <kbd>M</kbd> metronome · <kbd>S</kbd>{' '}
-          skeleton · <kbd>P</kbd> gauge · <kbd>F</kbd> playfield · <kbd>D</kbd> debug
+          {SHORTCUTS.map(([key, label], i) => (
+            <span key={key}>
+              {i > 0 && ' · '}
+              <kbd>{key}</kbd> {t(label)}
+            </span>
+          ))}
         </li>
       </ul>
 
       {music}
 
+      {hideVideo && <p className="small">{t('privacy.hint')}</p>}
+
       <button type="button" onClick={onStart} disabled={loading}>
-        {loading ? 'Loading…' : 'Allow webcam / Play'}
+        {loading ? t('start.loading') : t('start.play')}
       </button>
 
       {/* A different chair, a different webcam, a different hand: the measured
@@ -148,7 +195,7 @@ export function StartScreen({
           not clearing site data. */}
       {calibrated && (
         <button type="button" className="button--ghost" onClick={onRecalibrate}>
-          Recalibrate my pinch
+          {t('start.recalibrate')}
         </button>
       )}
 

@@ -1,3 +1,5 @@
+import { useT } from '../lib/i18n';
+
 interface Props {
   /** True when the hand was lost rather than the player asking to stop. */
   auto: boolean;
@@ -20,43 +22,45 @@ interface Props {
  * mouse -- with the hand the game is waiting for.
  */
 export function PauseScreen({ auto, onResume, onRestart, onQuit }: Props): JSX.Element {
+  const t = useT();
+
   return (
     <div className="overlay overlay--pause">
-      <h1 className="title">{auto ? 'Hand lost' : 'Paused'}</h1>
+      <h1 className="title title--plain">{t(auto ? 'pause.title.auto' : 'pause.title')}</h1>
 
       <p className="subtitle">
         {auto ? (
           <>
-            Bring your hand back into view and the run picks up where it left off.
+            {t('pause.body.auto.1')}
             <br />
-            Nothing was judged while it was gone.
+            {t('pause.body.auto.2')}
           </>
         ) : (
-          <>The run resumes a beat before it stopped, so you get time to read the screen.</>
+          t('pause.body')
         )}
       </p>
 
       {!auto && (
         <button type="button" onClick={onResume}>
-          Resume
+          {t('pause.resume')}
         </button>
       )}
 
       <p className="small">
-        <kbd>Space</kbd> {auto ? 'resume now' : 'resume'} · <kbd>R</kbd> restart ·{' '}
-        <kbd>Esc</kbd> menu
+        <kbd>Space</kbd> {t(auto ? 'key.resumeNow' : 'key.resume')} · <kbd>R</kbd>{' '}
+        {t('key.restart')} · <kbd>Esc</kbd> {t('key.menu')}
       </p>
 
       <div className="pause-actions">
         <button type="button" className="button--ghost" onClick={onRestart}>
-          Restart the run
+          {t('pause.restart')}
         </button>
         {/* The way out. A paused run had no exit at all: the only routes back to
             the menu were finishing it or reloading the page, which is a strange
             thing to ask of someone who has just stopped because they need to be
             somewhere else. */}
         <button type="button" className="button--ghost" onClick={onQuit}>
-          Back to menu
+          {t('pause.quit')}
         </button>
       </div>
     </div>

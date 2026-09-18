@@ -1,10 +1,11 @@
-import { GRADE_STYLE, settings } from '../config/settings';
+import { GRADE_STYLE, gradeFill, settings } from '../config/settings';
 import type { GameSnapshot } from '../game/types';
+import { useT, type MessageKey } from '../lib/i18n';
 
 interface Props {
   snapshot: GameSnapshot;
   /** Score to chase: a challenge link if there is one, otherwise your best. */
-  target: { score: number; label: string } | null;
+  target: { score: number; label: MessageKey } | null;
 }
 
 /**
@@ -15,6 +16,7 @@ interface Props {
  * does not rerender 60 times a second.
  */
 export function Hud({ snapshot, target }: Props): JSX.Element | null {
+  const t = useT();
   if (snapshot.phase !== 'playing') return null;
 
   // Game time starts slightly negative (t=0 is scheduled a few ms ahead so the
@@ -24,7 +26,8 @@ export function Hud({ snapshot, target }: Props): JSX.Element | null {
     Math.ceil(settings.COUNTDOWN),
   );
   const progress = snapshot.duration > 0 ? Math.min(snapshot.time / snapshot.duration, 1) : 0;
-  const grade = snapshot.lastGrade ? GRADE_STYLE[snapshot.lastGrade] : null;
+  const gradeName = snapshot.lastGrade;
+  const grade = gradeName ? GRADE_STYLE[gradeName] : null;
   const offset = snapshot.lastOffsetMs;
   // Signed, so it reads as a race rather than as a number to interpret.
   const delta = target ? snapshot.score - target.score : 0;
@@ -40,11 +43,11 @@ export function Hud({ snapshot, target }: Props): JSX.Element | null {
             a race -- against yourself, or against whoever sent the link. */}
         {target && (
           <div className={`hud-target${delta >= 0 ? ' hud-target--ahead' : ''}`}>
-            <span className="hud-target-label">{target.label}</span>
-            <span className="hud-target-value">{target.score.toLocaleString()}</span>
+            <span className="hud-target-label">{t(target.label)}</span>
+            <span className="hud-target-value">{t.n(target.score)}</span>
             <span className="hud-target-delta">
               {delta >= 0 ? '+' : ''}
-              {delta.toLocaleString()}
+              {t.n(delta)}
             </span>
           </div>
         )}
@@ -59,44 +62,48 @@ export function Hud({ snapshot, target }: Props): JSX.Element | null {
         </div>
       )}
 
-      {grade && (
-        <div
-          className="hud-grade"
-          key={`grade-${snapshot.lastEventId}`}
-          style={{ color: grade.color }}
-        >
-          <span className="hud-grade-label">{grade.label}</span>
-          {snapshot.lastGrade !== 'MISS' && (
+      {grade && gradeName && (
+        <div className="hud-grade" key={`grade-${snapshot.lastEventId}`}>
+          <span className="hud-grade-label" style={{ backgroundColor: gradeFill(gradeName) }}>
+            {grade.label}
+          </span>
+          {gradeName !== 'MISS' && (
             <span className="hud-grade-offset">
               {offset >= 0 ? '+' : ''}
-              {offset.toFixed(0)} ms {offset < 0 ? '(early)' : '(late)'}
+              {offset.toFixed(0)} ms {t(offset < 0 ? 'hud.early' : 'hud.late')}
             </span>
           )}
         </div>
       )}
 
-      {!snapshot.handVisible && (
-        <div className="hud-warning">No hand detected — show your hand to the camera</div>
-      )}
+      {!snapshot.handVisible && <div className="hud-warning">{t('hud.noHand')}</div>}
 
       {/* Phase banner: replayed on every change thanks to the key. */}
       {snapshot.phaseName && (
         <div className="hud-phase-banner" key={`phase-${snapshot.phaseEventId}`}>
-          <div className="hud-phase-name">{snapshot.phaseName}</div>
-          <div className="hud-phase-hint">{snapshot.phaseHint}</div>
+          <div className="hud-phase-name">
+            {t.or(`phase.${snapshot.phaseId}.name`, snapshot.phaseName)}
+          </div>
+          <div className="hud-phase-hint">
+            {t.or(`phase.${snapshot.phaseId}.hint`, snapshot.phaseHint)}
+          </div>
         </div>
       )}
 
       <div className="hud-status">
         <span>
-          Phase {snapshot.phaseIndex + 1}/{snapshot.phaseCount}
+          {t('hud.phase', { index: snapshot.phaseIndex + 1, count: snapshot.phaseCount })}
         </span>
+        {/* Privacy mode is stated, not implied. Someone recording needs to be
+            able to check at a glance that the webcam image is not on screen,
+            and "I cannot see it" is weaker than the game saying so. */}
+        {!settings.SHOW_VIDEO && <span className="hud-privacy">{t('hud.privacy')}</span>}
       </div>
 
       {countdownLeft > 0 && (
         <div className="hud-countdown" key={`cd-${countdownLeft}`}>
           <div className="hud-countdown-number">{countdownLeft}</div>
-          <div className="hud-countdown-hint">Get your hand ready…</div>
+          <div className="hud-countdown-hint">{t('hud.countdown')}</div>
         </div>
       )}
 

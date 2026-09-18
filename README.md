@@ -340,6 +340,33 @@ match the BPM. The beatmap keeps its own grid and nothing detects the first
 downbeat, so a track that does not start on one will sit at a constant offset —
 this is a tool for getting close, not a sync.
 
+**Privacy mode hides the webcam image** (<kbd>V</kbd>), and it is the symmetric
+of the skeleton toggle that was already there: `SHOW_SKELETON` draws the hand on
+top of the video, `SHOW_VIDEO` decides whether the video is drawn at all. With it
+off, the frame is never painted — what is left is the skeleton, the targets and
+the pinch gauge on flat white. The tracking is untouched; MediaPipe still gets
+every frame, only the `drawImage` is skipped.
+
+It exists because the alternative — blurring the background — solves the wrong
+problem twice. It is expensive per frame, it still leaks the shape of whoever
+walks behind you, and it looks like a video call. Anyone streaming, recording a
+clip in a shared flat, or demoing at a conference needs the image gone, not
+softened. It also happens to be the better picture: a two-colour skeleton on
+white reads at a glance in a way a blurred living room never does.
+
+**The interface is in English and French**, detected from `navigator.language`
+and switchable from the toggle on the start screen. Every string lives in
+[`src/lib/i18n.ts`](src/lib/i18n.ts), where the English catalogue is the schema
+and the French one is typed as `Record<MessageKey, string>` — a missing
+translation is a build error, not an English word in the middle of a French
+sentence.
+
+**Phones get a screen, not a broken game.** A webcam rhythm game cannot work on
+a handheld device: the camera is in the hand that is supposed to be pinching. A
+coarse pointer on a small screen therefore lands on a page that says so, offers
+to copy the link for later, and still lets you through if you are on a tablet
+propped up on a stand.
+
 Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
 `duration` for sliders) and phase definitions — in
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
@@ -347,8 +374,9 @@ and `slider()` helpers. Add yours and register it in
 [`src/beatmaps/index.ts`](src/beatmaps/index.ts). To play on your own music, drop
 a file in `public/music/` and set `VITE_MUSIC_URL`.
 
-Shortcuts: <kbd>R</kbd> replay · <kbd>M</kbd> metronome · <kbd>S</kbd> skeleton ·
-<kbd>P</kbd> pinch gauge · <kbd>F</kbd> playfield · <kbd>D</kbd> debug.
+Shortcuts: <kbd>Space</kbd> pause · <kbd>R</kbd> replay · <kbd>V</kbd> privacy
+mode · <kbd>S</kbd> skeleton · <kbd>M</kbd> metronome · <kbd>P</kbd> pinch gauge ·
+<kbd>F</kbd> playfield · <kbd>D</kbd> debug.
 
 ## Quick start
 
@@ -363,8 +391,10 @@ npm install
 npm run dev
 ```
 
-Open the printed URL and click **Autoriser la webcam / Jouer**. The model (~7 MB)
-downloads on first launch, then stays cached.
+Open the printed URL and click **Allow webcam / Play** (**Autoriser la webcam /
+Jouer** if your browser asks for French — the interface follows
+`navigator.language` and can be switched from the toggle at the top of the start
+screen). The model (~7 MB) downloads on first launch, then stays cached.
 
 > The webcam needs a secure context: `localhost` or `https://`. A file opened
 > over `file://` is blocked by most browsers.
@@ -387,12 +417,18 @@ src/
     oneEuro.ts        One-Euro filter
     audio.ts          Tone.js: reference clock, generated soundtrack, hit/miss sounds
     highscores.ts     localStorage best scores
-    errors.ts         technical errors → human messages
+    errors.ts         technical errors → message keys
+    i18n.ts           the English and French catalogues, and the language store
+    device.ts         is this a device the game can be played on at all
   config/settings.ts  every knob, mutable at runtime
   game/               engine (timing windows, score, phases), slider geometry,
                       effects, types
   render/             view + playfield transforms, renderer (video, targets, skeleton)
-  components/         GameCanvas (loop), Hud, Start/Error/End screens
+  components/         GameCanvas (loop), Hud, Start/Error/End/Mobile screens
+  fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
+  styles.css          the pixel-art design system
+scripts/
+  make-og.mjs         draws public/og.png, the link-preview card, from the logo
   beatmaps/           charts and phase definitions
 ```
 

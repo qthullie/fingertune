@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import logoUrl from '../../assets/logo.svg';
-import { GRADE_STYLE } from '../config/settings';
+import { GRADE_STYLE, gradeFill } from '../config/settings';
 import type { Beatmap, GameSnapshot } from '../game/types';
 import type { RecordResult } from '../lib/highscores';
-import { buildChallengeUrl, buildShareText, copyText } from '../lib/challenge';
+import { buildChallengeUrl, copyText } from '../lib/challenge';
+import { useT } from '../lib/i18n';
 
 interface Props {
   snapshot: GameSnapshot;
@@ -24,21 +25,30 @@ export function EndScreen({
   onReplay,
   onBackToMenu,
 }: Props): JSX.Element {
+  const t = useT();
   const isRecord = record?.isRecord ?? false;
   const previous = record?.previous ?? null;
   const [copied, setCopied] = useState<'idle' | 'ok' | 'failed'>('idle');
 
   const beatChallenge = challengeScore !== null && snapshot.score > challengeScore;
+  const mapTitle = t.or(`map.${beatmap.id}.title`, beatmap.title);
 
+  /*
+   * The share text is built here rather than in lib/challenge, because it is
+   * the one string in the app whose language is a real decision: it is written
+   * by the player, for someone else, in whatever language they are playing in.
+   */
   const share = async (): Promise<void> => {
     const ok = await copyText(
-      buildShareText({
-        beatmapTitle: beatmap.title,
-        score: snapshot.score,
-        accuracy: snapshot.accuracy,
-        maxCombo: snapshot.maxCombo,
-        url: buildChallengeUrl(beatmap.id, snapshot.score),
-      }),
+      [
+        t('end.share.line1', { map: mapTitle }),
+        t('end.share.line2', {
+          score: t.n(snapshot.score),
+          accuracy: snapshot.accuracy.toFixed(2),
+          combo: snapshot.maxCombo,
+        }),
+        t('end.share.line3', { url: buildChallengeUrl(beatmap.id, snapshot.score) }),
+      ].join('\n'),
     );
     setCopied(ok ? 'ok' : 'failed');
   };
@@ -46,19 +56,32 @@ export function EndScreen({
   return (
     <div className="overlay">
       <img className="logo logo--small" src={logoUrl} alt="" width={72} height={72} />
-      <h1 className="title">
-        {beatChallenge ? 'Challenge beaten!' : isRecord ? 'New record!' : 'Run complete'}
+      <h1 className="title title--plain">
+        {beatChallenge
+          ? t('end.title.challenge')
+          : isRecord
+            ? t('end.title.record')
+            : t('end.title.done')}
       </h1>
 
       <div className="results">
         <div className="result-main">
-          <span className="result-score">{snapshot.score}</span>
-          <span className="result-accuracy">{snapshot.accuracy.toFixed(2)} % accuracy</span>
-          <span className="result-combo">Max combo {snapshot.maxCombo}x</span>
+          <span className="result-score">{t.n(snapshot.score)}</span>
+          <span className="result-accuracy">
+            {t('end.accuracy', { accuracy: snapshot.accuracy.toFixed(2) })}
+          </span>
+          <span className="result-combo">{t('end.maxCombo', { combo: snapshot.maxCombo })}</span>
         </div>
         <div className="result-grades">
+          {/* The count sits on a block of the grade's colour rather than being
+              written in it: ink on cyan is 8:1, cyan on white is 2.2:1, and it
+              is the same colour either way round. */}
           {(['PERFECT', 'GOOD', 'MISS'] as const).map((grade) => (
-            <span key={grade} style={{ color: GRADE_STYLE[grade].color }}>
+            <span
+              key={grade}
+              className="result-grade"
+              style={{ backgroundColor: gradeFill(grade) }}
+            >
               {GRADE_STYLE[grade].label} {snapshot.counts[grade]}
             </span>
           ))}
@@ -67,25 +90,32 @@ export function EndScreen({
         {challengeScore !== null && (
           <p className="result-record">
             {beatChallenge
-              ? `Challenge was ${challengeScore.toLocaleString()} — beaten by ${(
-                  snapshot.score - challengeScore
-                ).toLocaleString()}.`
-              : `Challenge was ${challengeScore.toLocaleString()} — ${(
-                  challengeScore - snapshot.score
-                ).toLocaleString()} short.`}
+              ? t('end.challenge.beaten', {
+                  score: t.n(challengeScore),
+                  delta: t.n(snapshot.score - challengeScore),
+                })
+              : t('end.challenge.short', {
+                  score: t.n(challengeScore),
+                  delta: t.n(challengeScore - snapshot.score),
+                })}
           </p>
         )}
-        {isRecord && previous && <p className="result-record">Previous best: {previous.score}</p>}
-        {isRecord && !previous && <p className="result-record">First score saved.</p>}
+        {isRecord && previous && (
+          <p className="result-record">{t('end.previous', { score: t.n(previous.score) })}</p>
+        )}
+        {isRecord && !previous && <p className="result-record">{t('end.first')}</p>}
         {!isRecord && record && (
           <p className="result-record">
-            Best: {record.best.score} ({record.best.accuracy.toFixed(2)} %)
+            {t('end.best', {
+              score: t.n(record.best.score),
+              accuracy: record.best.accuracy.toFixed(2),
+            })}
           </p>
         )}
       </div>
 
       <button type="button" onClick={onReplay}>
-        Play again
+        {t('end.replay')}
       </button>
 
       {/* A score that cannot leave the machine is a score nobody can be shown.
@@ -94,17 +124,17 @@ export function EndScreen({
           server to exist. */}
       <button type="button" className="button--ghost" onClick={() => void share()}>
         {copied === 'ok'
-          ? 'Copied — send it to someone'
+          ? t('end.share.ok')
           : copied === 'failed'
-            ? 'Could not copy — select the URL manually'
-            : 'Copy result + challenge link'}
+            ? t('end.share.failed')
+            : t('end.share')}
       </button>
 
       <button type="button" className="button--ghost" onClick={onBackToMenu}>
-        Change beatmap
+        {t('end.changeMap')}
       </button>
 
-      <p className="small">Tip: press R to restart without coming back here.</p>
+      <p className="small">{t('end.tip')}</p>
     </div>
   );
 }

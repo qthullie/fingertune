@@ -83,6 +83,7 @@ export class GameEngine {
       phase: this.phase,
       phaseIndex: this.phaseIndex,
       phaseCount: this.phases.length,
+      phaseId: current?.id ?? '',
       phaseName: current?.name ?? '',
       phaseHint: current?.hint ?? '',
       phaseEventId: this.phaseEventId,

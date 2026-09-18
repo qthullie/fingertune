@@ -77,6 +77,43 @@ export interface Settings {
   /* ---- Misc ---------------------------------------------------------------------- */
   /** Draw the full hand skeleton (21 landmarks + bones). Key S. */
   SHOW_SKELETON: boolean;
+  /**
+   * Draw the webcam image. Key V.
+   *
+   * The symmetric of SHOW_SKELETON, and the more useful half of the pair. Off,
+   * the frame is never painted: what is left is the skeleton, the targets and
+   * the gauge on flat paper. Nobody sees the room behind you.
+   *
+   * This is a feature, not a workaround. Streamers need it, anyone recording a
+   * clip in a shared flat needs it, and a demo at a conference needs it. It
+   * also happens to be the better picture — a hand drawn in two colours over
+   * white reads at a glance, which a blurred living room never does.
+   *
+   * The tracking is untouched: MediaPipe still receives every frame. Only the
+   * `drawImage` is skipped, so hiding the video costs nothing and, on a weak
+   * laptop, gives a frame or two back.
+   */
+  SHOW_VIDEO: boolean;
+  /**
+   * Screen pixels per rendered pixel. 1 renders the playfield smooth.
+   *
+   * Above 1, the canvas is drawn into a buffer this many times smaller than the
+   * window and blown back up with `image-rendering: pixelated`. Nothing in the
+   * drawing code knows about it: every coordinate, the hit tests included,
+   * lives in that space, so the game is identical and only the grain changes.
+   *
+   * It defaults to 1, and the reason is the thing you aim at. The pixel art is
+   * the logo and the interface around it; a target is a circle, and a circle
+   * quantised onto a coarse grid has to be interpreted before it can be hit —
+   * which is a cost paid in the one place the game asks for precision. At 3 the
+   * approach ring, the mark the player is actually timing against, loses its
+   * edge entirely.
+   *
+   * 2 and 3 are there for anyone who wants the whole screen blocky, and every
+   * line width scales with it (see `unit()` in render/renderer.ts) so nothing
+   * turns into a slab.
+   */
+  PIXEL_SCALE: number;
   /** Live pinch gauge (ratio + thresholds), bottom right. Key P. */
   SHOW_PINCH_METER: boolean;
   /** Outline the playfield, so you can see where targets can appear. Key F. */
@@ -147,6 +184,8 @@ export const settings: Settings = {
   HAND_LOST_TIMEOUT: 0.5,
 
   SHOW_SKELETON: true,
+  SHOW_VIDEO: true,
+  PIXEL_SCALE: 1,
   SHOW_PINCH_METER: true,
   SHOW_PLAYFIELD: false,
   COUNTDOWN: 3.0,
@@ -180,11 +219,85 @@ export const assets = {
    * in .env.local to play over it. Then align your beatmap's `t` values to it.
    */
   musicUrl: import.meta.env.VITE_MUSIC_URL,
+  /**
+   * Public leaderboard endpoint (see server/leaderboard-worker.js).
+   *
+   * Empty by default, and that is a working configuration: with no URL the
+   * board reports itself as not configured and the game keeps its local high
+   * scores. Nothing here is required for the game to run.
+   */
+  leaderboardUrl: import.meta.env.VITE_LEADERBOARD_URL,
 } as const;
+
+/**
+ * The whole palette, in one place, mirrored by the custom properties in
+ * styles.css.
+ *
+ * Two colours, and they are the logo's own: `#ff5edb` and `#4dd8ff`, exactly as
+ * they appear in assets/logo.svg. Not a darker magenta for text and a brighter
+ * one for fills — one magenta. A page carrying four near-misses of the same hue
+ * reads as a page that could not decide, and it stops looking like its own icon.
+ *
+ * Which means one rule, and everything below follows from it: **colour is never
+ * text**. `#4dd8ff` on white is about 1.5:1, so a cyan word is a decoration
+ * someone has to squint at. Colour is a fill with ink on top of it, or a stroke
+ * on the canvas thick enough to be a shape. Ink carries the words.
+ *
+ * `red` is the one exception and is not a brand colour: it marks failure — a
+ * miss, an error, being behind the score you are chasing — and it is chosen to
+ * sit clearly apart from the magenta so the two are never confused.
+ *
+ * There are no gradients anywhere, on canvas or in CSS. A gradient is a
+ * continuum, and pixel art is a set of decisions about which of a handful of
+ * colours each square gets.
+ */
+export const PALETTE = {
+  /** Page and canvas background. */
+  paper: '#ffffff',
+  /** Panels and inactive tracks, one step off the paper. */
+  paperShade: '#f4f4f8',
+  /** Hairlines and dividers. */
+  rule: '#d9d9e3',
+  /** Everything that is a word, plus borders and skeleton bones. */
+  ink: '#16162a',
+  /** Secondary text. Ink, lightened — not a colour. */
+  inkSoft: '#61617a',
+  /** The logo's magenta. The approach ring, a held pinch, the primary action. */
+  pink: '#ff5edb',
+  /** The logo's cyan. The target, the first hand, progress, PERFECT. */
+  cyan: '#4dd8ff',
+  /** Failure only, and deliberately far from the magenta. */
+  red: '#e5484d',
+} as const;
+
+export type GradeName = 'PERFECT' | 'GOOD' | 'MISS';
 
 /** Grade colours, shared by the canvas and the HUD. */
 export const GRADE_STYLE = {
-  PERFECT: { label: 'PERFECT', color: '#4dd8ff', score: () => settings.SCORE_PERFECT, weight: 1.0 },
-  GOOD: { label: 'GOOD', color: '#ffd24d', score: () => settings.SCORE_GOOD, weight: 0.34 },
-  MISS: { label: 'MISS', color: '#ff5566', score: () => 0, weight: 0 },
+  PERFECT: {
+    label: 'PERFECT',
+    /** Filled cyan behind ink, never cyan lettering. */
+    color: PALETTE.cyan,
+    score: () => settings.SCORE_PERFECT,
+    weight: 1.0,
+  },
+  /* GOOD gets no colour at all. It is the middle judgement, and giving it a
+     third hue would mean inventing one; being the unmarked case is what tells
+     the player they neither nailed it nor lost it. */
+  GOOD: { label: 'GOOD', color: PALETTE.ink, score: () => settings.SCORE_GOOD, weight: 0.34 },
+  MISS: { label: 'MISS', color: PALETTE.red, score: () => 0, weight: 0 },
 } as const;
+
+/**
+ * The fill behind a grade label, or `undefined` for the one that has none.
+ *
+ * Grades are blocks of colour with the word in ink on top, never coloured
+ * lettering: ink on cyan is 8:1, cyan on white is 2.2:1, and it is the same
+ * colour either way round. GOOD's "colour" is the ink itself, which means it
+ * gets no fill — being the unmarked case is what tells the player they neither
+ * nailed it nor lost it.
+ */
+export function gradeFill(grade: GradeName): string | undefined {
+  const { color } = GRADE_STYLE[grade];
+  return color === PALETTE.ink ? undefined : color;
+}

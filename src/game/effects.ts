@@ -3,6 +3,7 @@
  * Purely decorative — none of it touches the score.
  */
 
+import { PALETTE } from '../config/settings';
 import type { Vec2 } from './types';
 
 export type EffectKind = 'particle' | 'ring' | 'miss' | 'ghost';
@@ -20,7 +21,7 @@ export interface Effect extends Vec2 {
 
 export class EffectSystem {
   items: Effect[] = [];
-  flashColor = '#ffffff';
+  flashColor: string = PALETTE.pink;
   flashAmount = 0;
 
   /** Particle burst plus a ring, on a hit. */
@@ -81,13 +82,13 @@ export class EffectSystem {
         vy: Math.sin(angle) * speed,
         life: 1,
         decay: 3.4,
-        color: '#4dffb0',
+        color: PALETTE.pink,
         size: 1.5 + Math.random() * 2,
       });
     }
   }
 
-  /** Pinch recognised but nothing hit: a small white ring. */
+  /** Pinch recognised but nothing hit: a small ink ring, visible on paper. */
   pinchGhost(at: Vec2): void {
     this.items.push({
       kind: 'ghost',
@@ -97,7 +98,7 @@ export class EffectSystem {
       vy: 0,
       life: 1,
       decay: 3.2,
-      color: 'rgba(255,255,255,0.9)',
+      color: PALETTE.ink,
       size: 1,
     });
   }

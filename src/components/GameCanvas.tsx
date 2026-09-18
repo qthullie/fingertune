@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { settings } from '../config/settings';
 import { useAnimationFrame } from '../hooks/useAnimationFrame';
 import type { CursorInput, GameEngine } from '../game/engine';
 import type { HandTracker } from '../lib/handTracking';
@@ -30,21 +31,56 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fpsRef = useRef(60);
 
-  // Canvas size = CSS size x devicePixelRatio (capped at 2: beyond that the fill
-  // cost explodes for no visible gain).
+  /* The size of the render buffer, in its own pixels. Everything below — the
+     view, the playfield, the cursors, the hit tests — is expressed in these,
+     never in CSS pixels, so the whole game moves together when the scale
+     changes. */
+  const sizeRef = useRef({ width: 1, height: 1 });
+
+  /**
+   * Two sizing modes, and `PIXEL_SCALE` picks between them.
+   *
+   * At 1 — the default — this is the ordinary thing: the backing store is the
+   * window times the device pixel ratio (capped at 2, beyond which the fill
+   * cost explodes for no visible gain), so circles come out smooth on a retina
+   * screen and a logical pixel is a CSS pixel.
+   *
+   * Above 1 it inverts: the backing store is *smaller* than the window and CSS
+   * enlarges it with `image-rendering: pixelated`, so every mark lands on a
+   * coarse grid. The CSS size is then rounded up to a whole number of buffer
+   * pixels rather than set to the window size — one is a square blown up by
+   * exactly `PIXEL_SCALE`, the other is a square blown up by 2.98, which puts a
+   * seam through every fourth column. The few pixels of overflow are hidden by
+   * `overflow: hidden` on the page.
+   *
+   * Either way the loop below works in logical pixels and never learns which
+   * mode it is in.
+   */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const resize = (): void => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const width = window.innerWidth;
-      const height = window.innerHeight;
-      canvas.width = Math.floor(width * dpr);
-      canvas.height = Math.floor(height * dpr);
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-      canvas.getContext('2d')?.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const scale = Math.max(1, Math.round(settings.PIXEL_SCALE));
+      const smooth = scale === 1;
+      const density = smooth ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+
+      const width = smooth ? window.innerWidth : Math.ceil(window.innerWidth / scale);
+      const height = smooth ? window.innerHeight : Math.ceil(window.innerHeight / scale);
+
+      canvas.width = Math.floor(width * density);
+      canvas.height = Math.floor(height * density);
+      canvas.style.width = `${width * scale}px`;
+      canvas.style.height = `${height * scale}px`;
+      sizeRef.current = { width, height };
+
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(density, 0, 0, density, 0, 0);
+        // When the frame is being downscaled into a small buffer, smoothing
+        // would average the grain away and undo the point of that buffer.
+        ctx.imageSmoothingEnabled = smooth;
+      }
     };
 
     resize();
@@ -63,8 +99,7 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
 
     fpsRef.current = fpsRef.current * 0.9 + (1 / Math.max(dt, 1e-4)) * 0.1;
 
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const { width, height } = sizeRef.current;
     const video = tracker.video;
     const view = computeCoverView(width, height, video?.videoWidth ?? 0, video?.videoHeight ?? 0);
     const playfield = computePlayfield(view, width, height);

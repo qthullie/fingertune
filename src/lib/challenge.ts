@@ -43,29 +43,6 @@ export function buildChallengeUrl(beatmapId: string, score: number): string {
 }
 
 /**
- * The text that goes on the clipboard at the end of a run.
- *
- * Deliberately plain: it has to survive being pasted into a chat window, which
- * rules out anything relying on layout. The numbers first, because that is what
- * the message is for, and the link last, because that is what turns reading it
- * into playing.
- */
-export function buildShareText(options: {
-  beatmapTitle: string;
-  score: number;
-  accuracy: number;
-  maxCombo: number;
-  url: string;
-}): string {
-  const { beatmapTitle, score, accuracy, maxCombo, url } = options;
-  return [
-    `Fingertune — ${beatmapTitle}`,
-    `${score.toLocaleString()} pts · ${accuracy.toFixed(2)}% · ${maxCombo}x combo`,
-    `Beat it: ${url}`,
-  ].join('\n');
-}
-
-/**
  * Copies text, with a fallback for browsers that refuse the async clipboard.
  *
  * `navigator.clipboard` needs a secure context and a permission that can be

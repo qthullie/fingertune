@@ -6,9 +6,13 @@ import { ErrorScreen } from './components/ErrorScreen';
 import { EndScreen } from './components/EndScreen';
 import { PauseScreen } from './components/PauseScreen';
 import { GameEngine } from './game/engine';
-import { HandTracker } from './lib/handTracking';
+import { HandTracker, type LoadingStep } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
 import { explainError, type FriendlyError } from './lib/errors';
+import { needsADesk } from './lib/device';
+import { loadHideVideo, saveHideVideo } from './lib/preferences';
+import { useT, type MessageKey } from './lib/i18n';
+import { MobileScreen } from './components/MobileScreen';
 import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/highscores';
 import { beatmaps, defaultBeatmap, findBeatmap } from './beatmaps';
 import { parseChallenge } from './lib/challenge';
@@ -31,6 +35,18 @@ const audio = new AudioEngine();
 
 type UiPhase = 'start' | 'calibrating' | 'playing' | 'end' | 'error';
 
+/** Which slow step the loader is on, as a message key. */
+const STEP_KEYS = {
+  runtime: 'status.runtime',
+  model: 'status.model',
+  camera: 'status.camera',
+} as const satisfies Record<LoadingStep, MessageKey>;
+
+/* Privacy is decided before anything renders, for the same reason it is on the
+   start screen at all: the point of hiding the webcam image is that it is never
+   drawn, and a setting applied one frame late has already failed. */
+settings.SHOW_VIDEO = !loadHideVideo();
+
 /* Thresholds measured on a previous visit. A hand does not change between
    sessions, so applying them before anything renders means a returning player
    never sees the calibration screen again. */
@@ -41,8 +57,13 @@ if (storedCalibration) {
 }
 
 export function App(): JSX.Element {
+  const t = useT();
   const [uiPhase, setUiPhase] = useState<UiPhase>('start');
-  const [status, setStatus] = useState('Hand-tracking model not loaded yet (~7 MB on first run).');
+  const [status, setStatus] = useState<MessageKey>('status.idle');
+  /* A phone is shown a screen of its own before anything else, and can still
+     opt in: the detection is a good guess, not a verdict (see lib/device). */
+  const [deviceOk, setDeviceOk] = useState(() => !needsADesk());
+  const [hideVideo, setHideVideo] = useState(() => !settings.SHOW_VIDEO);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
   /* A challenge link picks the map and the score to chase before anything
@@ -81,10 +102,10 @@ export function App(): JSX.Element {
   /* A challenge outranks a personal best: someone sent that number on purpose,
      and racing two figures at once is racing neither. */
   const challengeApplies = challenge !== null && challenge.beatmapId === beatmap.id;
-  const target = challengeApplies
-    ? { score: challenge.score, label: 'Challenge' }
+  const target: { score: number; label: MessageKey } | null = challengeApplies
+    ? { score: challenge.score, label: 'hud.target.challenge' }
     : best
-      ? { score: best.score, label: 'Your best' }
+      ? { score: best.score, label: 'hud.target.best' }
       : null;
 
   /** Starts a run (assumes model, camera and audio are ready). */
@@ -135,9 +156,9 @@ export function App(): JSX.Element {
       // (muted tab, system volume), not the game.
       audio.playTestBlip();
       await audio.loadTrack(trackRef.current?.url ?? assets.musicUrl);
-      await tracker.loadModel(setStatus);
-      await tracker.startCamera(setStatus);
-      setStatus('Ready.');
+      await tracker.loadModel((step) => setStatus(STEP_KEYS[step]));
+      await tracker.startCamera((step) => setStatus(STEP_KEYS[step]));
+      setStatus('status.ready');
       // First visit: measure this hand before asking it to play. Everyone else
       // goes straight in on the thresholds they already have.
       if (calibrateRef.current) setUiPhase('calibrating');
@@ -184,12 +205,22 @@ export function App(): JSX.Element {
       if (key === 'm') settings.METRONOME_ON = !settings.METRONOME_ON;
       if (key === 'd') settings.DEBUG = !settings.DEBUG;
       if (key === 's') settings.SHOW_SKELETON = !settings.SHOW_SKELETON;
+      // Privacy mode. The symmetric of S, and the one people actually reach
+      // for: it stops the webcam frame being drawn at all.
+      if (key === 'v') setHideVideo((previous) => !previous);
       if (key === 'p') settings.SHOW_PINCH_METER = !settings.SHOW_PINCH_METER;
       if (key === 'f') settings.SHOW_PLAYFIELD = !settings.SHOW_PLAYFIELD;
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [startRun, quitToMenu]);
+
+  /* The switch on the start screen and the V key are the same decision, so
+     they go through one piece of state rather than each poking `settings`. */
+  useEffect(() => {
+    settings.SHOW_VIDEO = !hideVideo;
+    saveHideVideo(hideVideo);
+  }, [hideVideo]);
 
   /* Stop the music when the run ends. */
   useEffect(() => {
@@ -202,6 +233,8 @@ export function App(): JSX.Element {
       fingertune: { settings, engine, tracker, audio, beatmaps },
     });
   }, []);
+
+  if (!deviceOk) return <MobileScreen onContinue={() => setDeviceOk(true)} />;
 
   return (
     <div className="app">
@@ -244,12 +277,14 @@ export function App(): JSX.Element {
               onBpm={setBpm}
             />
           }
+          hideVideo={hideVideo}
+          onHideVideo={setHideVideo}
           calibrated={!calibrate}
           onRecalibrate={() => {
             clearCalibration();
             setCalibrate(true);
           }}
-          status={status}
+          status={t(status)}
           loading={loading}
           best={best}
           onStart={() => void handleStart()}
@@ -269,7 +304,7 @@ export function App(): JSX.Element {
         />
       )}
       {uiPhase === 'error' && error && (
-        <ErrorScreen message={error.message} detail={error.detail} onRetry={handleRetry} />
+        <ErrorScreen messageKey={error.key} detail={error.detail} onRetry={handleRetry} />
       )}
       {uiPhase === 'playing' && snapshot.phase === 'paused' && (
         <PauseScreen

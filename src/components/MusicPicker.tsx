@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../lib/i18n';
 
 interface Props {
   /** Name of the loaded track, or null while the generated one is in use. */
@@ -30,6 +31,7 @@ const MAX_BPM = 220;
  * for getting close, not a beat detector.
  */
 export function MusicPicker({ trackName, onPick, onClear, bpm, onBpm }: Props): JSX.Element {
+  const t = useT();
   const [taps, setTaps] = useState<number[]>([]);
   const urlRef = useRef<string | null>(null);
 
@@ -70,7 +72,7 @@ export function MusicPicker({ trackName, onPick, onClear, bpm, onBpm }: Props): 
 
   return (
     <details className="music">
-      <summary>Play over your own music</summary>
+      <summary>{t('music.summary')}</summary>
 
       <div className="music-body">
         <label className="music-file">
@@ -79,21 +81,21 @@ export function MusicPicker({ trackName, onPick, onClear, bpm, onBpm }: Props): 
             accept="audio/*"
             onChange={(e) => pick(e.target.files?.[0])}
           />
-          <span>{trackName ?? 'Choose an audio file'}</span>
+          <span>{trackName ?? t('music.choose')}</span>
         </label>
 
         {trackName && (
           <button type="button" className="button--ghost" onClick={onClear}>
-            Back to the generated track
+            {t('music.back')}
           </button>
         )}
 
         <div className="music-bpm">
           <button type="button" className="button--ghost" onClick={tap}>
-            Tap tempo
+            {t('music.tap')}
           </button>
           <label>
-            BPM
+            {t('music.bpm')}
             <input
               type="number"
               min={MIN_BPM}
@@ -106,15 +108,11 @@ export function MusicPicker({ trackName, onPick, onClear, bpm, onBpm }: Props): 
             />
           </label>
           {taps.length > 0 && taps.length < 3 && (
-            <span className="small">Keep tapping…</span>
+            <span className="small">{t('music.keepTapping')}</span>
           )}
         </div>
 
-        <p className="small">
-          The notes keep the beatmap&apos;s own grid. Matching the BPM lines the spacing up with
-          your track, but the first downbeat is not detected — if the track does not start on one,
-          everything will sit at a constant offset. Your file never leaves this machine.
-        </p>
+        <p className="small">{t('music.caveat')}</p>
       </div>
     </details>
   );

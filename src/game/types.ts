@@ -153,6 +153,8 @@ export interface GameSnapshot {
   /** Current beatmap phase. */
   phaseIndex: number;
   phaseCount: number;
+  /** Phase id, so the UI can look up a translation for the name and hint. */
+  phaseId: string;
   phaseName: string;
   phaseHint: string;
   /** Increments on every phase change: used as a `key` for the banner. */

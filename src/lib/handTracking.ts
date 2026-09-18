@@ -168,6 +168,15 @@ export class HandState {
   }
 }
 
+/**
+ * Which slow step the loader is on.
+ *
+ * A step, not a sentence: this module has no business holding English. The UI
+ * turns it into `status.runtime` / `status.model` / `status.camera` in whatever
+ * language the player is reading.
+ */
+export type LoadingStep = 'runtime' | 'model' | 'camera';
+
 /** Errors surfaced to the UI so it can show a clear message. */
 export class TrackingError extends Error {
   constructor(
@@ -197,13 +206,13 @@ export class HandTracker {
   }
 
   /** Loads the wasm runtime and the model. Idempotent. */
-  async loadModel(onProgress?: (message: string) => void): Promise<void> {
+  async loadModel(onProgress?: (step: LoadingStep) => void): Promise<void> {
     if (this.landmarker) return;
     try {
-      onProgress?.('Loading the vision runtime…');
+      onProgress?.('runtime');
       const fileset = await FilesetResolver.forVisionTasks(assets.wasmPath);
 
-      onProgress?.('Loading the hand model…');
+      onProgress?.('model');
       this.landmarker = await HandLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: assets.modelUrl, delegate: 'GPU' },
         runningMode: 'VIDEO',
@@ -222,10 +231,10 @@ export class HandTracker {
   }
 
   /** Requests the webcam and starts the stream. Idempotent. */
-  async startCamera(onProgress?: (message: string) => void): Promise<HTMLVideoElement> {
+  async startCamera(onProgress?: (step: LoadingStep) => void): Promise<HTMLVideoElement> {
     if (this.video && this.cameraReady) return this.video;
 
-    onProgress?.('Requesting webcam access…');
+    onProgress?.('camera');
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new TrackingError('NO_MEDIA_DEVICES', 'Webcam API unavailable (insecure context?)');
     }

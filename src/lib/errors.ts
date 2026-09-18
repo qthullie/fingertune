@@ -1,9 +1,20 @@
-/** Turns technical failures into messages a player can act on. */
+/**
+ * Turns technical failures into something a player can act on.
+ *
+ * It returns a message *key*, never a sentence. A denied webcam is the same
+ * failure whatever language the page is in, and resolving it to English here
+ * would mean a French player reading a French screen with one English
+ * paragraph in the middle of it — which is exactly the moment they most need to
+ * understand what to do.
+ */
 
 import { TrackingError } from './handTracking';
+import type { MessageKey } from './i18n';
 
 export interface FriendlyError {
-  message: string;
+  /** Key into the message catalogue; the UI translates it. */
+  key: MessageKey;
+  /** The raw error, shown verbatim under the message. Never translated. */
   detail?: string;
 }
 
@@ -11,46 +22,21 @@ export function explainError(err: unknown): FriendlyError {
   const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
 
   if (err instanceof TrackingError) {
-    if (err.code === 'NO_MEDIA_DEVICES') {
-      return {
-        message:
-          'This browser does not expose the webcam. Serve the page over https:// or from ' +
-          'localhost — a file opened over file:// is blocked by most browsers.',
-        detail,
-      };
-    }
-    if (err.code === 'MODEL_LOAD_FAILED') {
-      return {
-        message:
-          'Could not load the hand-tracking model. Check your connection and try again ' +
-          '(the model is ~7 MB on first launch). If you are offline, run `npm run fetch:model` ' +
-          'to host it yourself.',
-        detail,
-      };
-    }
+    if (err.code === 'NO_MEDIA_DEVICES') return { key: 'error.noMediaDevices', detail };
+    if (err.code === 'MODEL_LOAD_FAILED') return { key: 'error.modelLoadFailed', detail };
   }
 
   const name = err instanceof Error ? err.name : '';
   switch (name) {
     case 'NotAllowedError':
     case 'SecurityError':
-      return {
-        message:
-          'Webcam access was denied. Allow the camera from the icon in the address bar, ' +
-          'then try again.',
-        detail,
-      };
+      return { key: 'error.notAllowed', detail };
     case 'NotFoundError':
     case 'OverconstrainedError':
-      return { message: 'No webcam found. Plug a camera in and try again.', detail };
+      return { key: 'error.notFound', detail };
     case 'NotReadableError':
-      return {
-        message:
-          'The webcam is already in use by another application (Zoom, Teams, OBS…). ' +
-          'Close it and try again.',
-        detail,
-      };
+      return { key: 'error.notReadable', detail };
     default:
-      return { message: 'Startup failed.', detail };
+      return { key: 'error.startupFailed', detail };
   }
 }

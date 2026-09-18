@@ -1,14 +1,82 @@
-/* Fingertune — global styles. The game fills the whole viewport. */
+/*
+ * Fingertune — global styles.
+ *
+ * The whole look comes from assets/logo.svg: a 16x16 sprite drawn with three
+ * colours and hard edges everywhere. The page is that sprite scaled up, so four
+ * rules hold throughout this file.
+ *
+ *   1. Two colours, and they are the logo's own: #ff5edb and #4dd8ff, exactly
+ *      as they appear in the sprite. Not a darker magenta for text and a
+ *      brighter one for fills — one magenta. A page carrying four near-misses
+ *      of the same hue reads as a page that could not decide.
+ *   2. Which forces the second rule: **colour is never a word.** #4dd8ff on
+ *      white is about 2.2:1, so a cyan label is something you squint at. Colour
+ *      is a fill with ink on top of it, or a 4px edge — a shape, never a
+ *      letterform. Ink carries the text. `--red` is the one exception and is
+ *      not a brand colour: it marks failure.
+ *   3. No gradient, no blur, no rounded corner. Borders are four offset shadows
+ *      so the corners come out notched, the way a bitmap frame does.
+ *   4. Everything sits on a 4px grid — `--px` below is one pixel of the sprite,
+ *      blown up.
+ *
+ * PALETTE in config/settings.ts mirrors these values for the canvas. Change
+ * one, change the other.
+ *
+ * The canvas itself is the exception to the pixel treatment, and deliberately:
+ * see PIXEL_SCALE. The interface is the sprite; the thing you aim at is a
+ * circle, and a circle on a coarse grid is one you have to interpret before you
+ * can hit it.
+ */
+
+/* Self-hosted so the game keeps working offline, in the single-file standalone
+   build, and on a conference wifi that blocks Google.
+
+   In src/, not public/: the base URL is relative (see vite.config.ts) so the
+   site works from /<repo>/ on GitHub Pages as well as from a plain folder, and
+   only assets Vite resolves itself get that base applied — a `/fonts/...` in
+   public/ would 404 on Pages. Licence in src/fonts/OFL.txt. */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/press-start-2p-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215,
+    U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./fonts/press-start-2p-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0,
+    U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 :root {
-  color-scheme: dark;
-  --accent-a: #4dd8ff;
-  --accent-b: #ff5edb;
-  --hot: #4dffb0;
-  --bg: #07070d;
-  --text: #e8e8f0;
-  --muted: #b9b9cf;
-  --dim: #7c7c96;
+  color-scheme: light;
+
+  /* One sprite pixel. Every border, gap and offset is a multiple of it. */
+  --px: 4px;
+
+  /* The logo's two colours, and nothing adjacent to them. */
+  --pink: #ff5edb;
+  --cyan: #4dd8ff;
+  /* Failure only. Deliberately far from the magenta. */
+  --red: #e5484d;
+
+  --paper: #ffffff;
+  --paper-shade: #f4f4f8;
+  --rule: #d9d9e3;
+  --ink: #16162a;
+  --ink-soft: #61617a;
+
+  --font-pixel: 'Press Start 2P', 'Courier New', monospace;
+  --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 * {
@@ -22,9 +90,23 @@ body,
   padding: 0;
   height: 100%;
   overflow: hidden;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  image-rendering: pixelated;
+}
+
+/*
+ * A pixel arrow instead of the system cursor.
+ *
+ * Drawn on a 12x12 grid and served at 24x24, so every square of the arrow is
+ * exactly two screen pixels. The hotspot sits at 0 0, which is the point.
+ */
+body {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cpath d='M0 0 L0 11 L3 8 L5 12 L7 11 L5 7 L9 7 Z' fill='%23ffffff' stroke='%2316162a' stroke-width='1'/%3E%3C/svg%3E")
+      0 0,
+    default;
 }
 
 .app {
@@ -33,11 +115,32 @@ body,
   height: 100vh;
 }
 
+/* At PIXEL_SCALE 1 the backing store already matches the CSS size, so
+   `pixelated` is a no-op; above 1 it is the whole point, and the difference
+   between a sprite and a blurred photograph. */
 .game-canvas {
   display: block;
-  width: 100vw;
-  height: 100vh;
+  image-rendering: pixelated;
   touch-action: none;
+}
+
+/* --------------------------------------------------------------- primitives -- */
+
+/*
+ * A bitmap frame: four offset shadows instead of a border.
+ *
+ * `border: 4px solid` would give square corners, which is exactly what a
+ * low-resolution frame does not have. Four shadows, one per side, leave the
+ * corners empty — the notch a sprite frame has.
+ */
+.pixel-edge {
+  border: 0;
+  border-radius: 0;
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
 }
 
 /* ------------------------------------------------------------------ overlays -- */
@@ -50,203 +153,234 @@ body,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding: 24px;
+  gap: calc(var(--px) * 4);
+  padding: calc(var(--px) * 7);
   text-align: center;
-  background: radial-gradient(ellipse at 50% 40%, #171733 0%, var(--bg) 70%);
+  background: var(--paper);
 }
 
 .logo {
-  /* Pixel-art sprite: never let the browser smooth it when scaling up. */
   image-rendering: pixelated;
-  filter: drop-shadow(0 6px 18px rgba(255, 94, 219, 0.35));
 }
 
 .logo--small {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
-.best-score {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 26px;
-  border: 1px solid #2c2c48;
-  border-radius: 14px;
-  background: rgba(20, 20, 34, 0.6);
-}
-
-.best-score-label {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  color: var(--dim);
-}
-
-.best-score-value {
-  font-size: 30px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--accent-a);
-}
-
-.best-score-detail {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.result-record {
-  margin: 0;
-  font-size: 14px;
-  color: var(--muted);
-}
-
+/*
+ * The wordmark, in ink.
+ *
+ * It was magenta and cyan, split down the middle, which is the one thing rule 2
+ * forbids: at this size it survives, but the same treatment anywhere smaller
+ * does not, and a system that only works at one size is not a system. The
+ * colour sits under the word instead, as a bar.
+ */
 .title {
+  position: relative;
   margin: 0;
-  font-size: clamp(32px, 7vw, 64px);
-  letter-spacing: 2px;
-  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  padding-bottom: calc(var(--px) * 2);
+  font-family: var(--font-pixel);
+  font-size: clamp(19px, 3.6vw, 36px);
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.title::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 60%;
+  height: var(--px);
+  transform: translateX(-50%);
+  background: var(--pink);
+}
+
+/* Headings that are sentences rather than the name: same face, smaller, and no
+   bar under them — the bar is the logotype's, not a heading style. */
+.title--plain {
+  font-size: clamp(14px, 2.4vw, 22px);
+  line-height: 1.6;
+  padding-bottom: 0;
+}
+
+.title--plain::after {
+  display: none;
 }
 
 .subtitle {
   max-width: 620px;
   margin: 0;
   font-size: 15px;
-  line-height: 1.55;
-  color: var(--muted);
+  line-height: 1.65;
+  color: var(--ink);
 }
 
 .tips {
-  max-width: 620px;
+  max-width: 640px;
+  margin: 0;
+  padding-left: calc(var(--px) * 5);
   text-align: left;
   font-size: 14px;
-  line-height: 1.7;
-  color: #9a9ab5;
+  line-height: 1.75;
+  color: var(--ink);
 }
 
+.tips li {
+  margin-bottom: calc(var(--px) * 1.5);
+}
+
+.tips li::marker {
+  color: var(--pink);
+}
+
+.small {
+  max-width: 620px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-soft);
+}
+
+kbd {
+  display: inline-block;
+  padding: calc(var(--px) / 2) var(--px);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--ink);
+  background: var(--paper-shade);
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
+}
+
+/*
+ * The pause overlay sits over a live run, so the frozen playfield stays visible
+ * through it: seeing the game still there is what makes it read as "held"
+ * rather than "over".
+ */
+.overlay--pause {
+  background: transparent;
+}
+
+.overlay--pause > * {
+  position: relative;
+  z-index: 1;
+}
+
+.overlay--pause::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--paper);
+  opacity: 0.9;
+}
+
+.error {
+  max-width: 620px;
+  margin: 0;
+  padding-left: calc(var(--px) * 3);
+  text-align: left;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  border-left: var(--px) solid var(--red);
+}
+
+.error-detail {
+  max-width: 620px;
+  margin: 0;
+  overflow-x: auto;
+  padding: calc(var(--px) * 3);
+  text-align: left;
+  background: var(--paper-shade);
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, monospace;
+  font-size: 12px;
+  color: var(--ink-soft);
+  box-shadow:
+    0 -2px 0 0 var(--rule),
+    0 2px 0 0 var(--rule),
+    -2px 0 0 0 var(--rule),
+    2px 0 0 0 var(--rule);
+}
+
+/* ------------------------------------------------------------------- buttons -- */
+
+/*
+ * Buttons are the sprite's own frame with a flat fill, and they move when
+ * pressed rather than lighting up. A bitmap button has no hover glow; it has a
+ * pressed state that shifts it into its own shadow, and that is the whole
+ * animation budget here.
+ *
+ * The label is always ink. Ink on magenta is 8:1, magenta on white is 2.2:1,
+ * and it is the same two colours either way round.
+ */
 button {
-  font: inherit;
-  font-size: 18px;
-  font-weight: 600;
-  padding: 14px 30px;
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  color: #06060c;
-  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
-  transition:
-    transform 0.12s ease,
-    filter 0.12s ease;
+  margin: var(--px);
+  padding: calc(var(--px) * 3) calc(var(--px) * 6);
+  font-family: var(--font-pixel);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink);
+  background: var(--pink);
+  border: 0;
+  border-radius: 0;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 12 12' shape-rendering='crispEdges'%3E%3Cpath d='M0 0 L0 11 L3 8 L5 12 L7 11 L5 7 L9 7 Z' fill='%23ff5edb' stroke='%2316162a' stroke-width='1'/%3E%3C/svg%3E")
+      0 0,
+    pointer;
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink),
+    var(--px) var(--px) 0 var(--px) var(--rule);
+  transition: transform 0.06s steps(2, end);
 }
 
 button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  filter: brightness(1.1);
+  background: var(--cyan);
+}
+
+button:active:not(:disabled) {
+  transform: translate(var(--px), var(--px));
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
+}
+
+button:focus-visible {
+  outline: var(--px) solid var(--cyan);
+  outline-offset: calc(var(--px) * 2);
 }
 
 button:disabled {
-  opacity: 0.5;
+  color: var(--ink-soft);
+  background: var(--paper-shade);
   cursor: progress;
 }
 
 /* Secondary action: present, but never competing with the primary one. */
 .button--ghost {
-  font-size: 15px;
-  padding: 10px 22px;
-  color: var(--fg, #e8e8f4);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: calc(var(--px) * 2) calc(var(--px) * 4);
+  font-size: 10px;
+  color: var(--ink-soft);
+  background: var(--paper);
 }
 
 .button--ghost:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
+  color: var(--ink);
+  background: var(--paper-shade);
 }
 
-/*
- * The pause overlay sits over a live run, so it stays translucent: seeing the
- * frozen playfield behind it is what makes it read as "held" rather than
- * "over". The blur keeps the text legible without hiding the game.
- */
-.overlay--pause {
-  background: rgba(9, 9, 20, 0.82);
-  backdrop-filter: blur(6px);
-}
-
-.error {
-  max-width: 620px;
-  font-size: 15px;
-  line-height: 1.6;
-  color: #ff7a7a;
-}
-
-.error-detail {
-  max-width: 620px;
-  overflow-x: auto;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: #14141f;
-  font-size: 12px;
-  color: var(--dim);
-}
-
-.small {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--dim);
-}
-
-kbd {
-  padding: 1px 6px;
-  border: 1px solid #3a3a5c;
-  border-radius: 5px;
-  background: #22223a;
-  font-size: 12px;
-}
-
-/* --------------------------------------------------------------------- results -- */
-
-.results {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: center;
-}
-
-.result-main {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.result-score {
-  font-size: 52px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.result-accuracy {
-  font-size: 18px;
-  color: var(--muted);
-}
-
-.result-combo {
-  font-size: 15px;
-  color: var(--dim);
-}
-
-.result-grades {
-  display: flex;
-  gap: 18px;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-/* ------------------------------------------------------------------------ HUD -- */
+/* --------------------------------------------------------------------- HUD --- */
 
 .hud {
   position: fixed;
@@ -254,40 +388,40 @@ kbd {
   z-index: 5;
   pointer-events: none;
   user-select: none;
+  font-family: var(--font-pixel);
 }
 
 .hud-score {
   position: absolute;
-  top: 18px;
-  right: 24px;
+  top: calc(var(--px) * 5);
+  right: calc(var(--px) * 6);
   text-align: right;
 }
 
 .hud-score-value {
-  font-size: 40px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+  font-size: clamp(20px, 3vw, 30px);
+  color: var(--ink);
 }
 
 .hud-accuracy {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--muted);
+  margin-top: var(--px);
+  font-size: 13px;
+  color: var(--ink-soft);
 }
 
 .hud-combo {
   position: absolute;
-  left: 24px;
-  bottom: 22px;
-  font-size: 44px;
-  font-weight: 800;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
-  animation: combo-pop 0.18s ease-out;
+  left: calc(var(--px) * 6);
+  bottom: calc(var(--px) * 6);
+  font-size: clamp(22px, 3.4vw, 34px);
+  color: var(--ink);
+  animation: combo-pop 0.18s steps(3, end);
 }
 
+/* A combo worth noticing gets filled, not recoloured: the number stays ink. */
 .hud-combo--hot {
-  color: var(--hot);
+  padding: calc(var(--px) / 2) var(--px);
+  background: var(--pink);
 }
 
 @keyframes combo-pop {
@@ -301,33 +435,38 @@ kbd {
 
 .hud-grade {
   position: absolute;
-  top: 22px;
+  top: calc(var(--px) * 6);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  animation: grade-fade 0.8s ease-out forwards;
+  gap: var(--px);
+  animation: grade-fade 0.8s steps(8, end) forwards;
 }
 
+/* The grade is a block of its own colour with the word in ink on top. Three
+   coloured words would be three things to squint at, once a frame. */
 .hud-grade-label {
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: 1px;
-  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.7);
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2.5);
+  font-size: clamp(14px, 2vw, 20px);
+  color: var(--ink);
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
 }
 
 .hud-grade-offset {
-  font-size: 15px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.75);
+  font-size: 10px;
+  color: var(--ink-soft);
 }
 
 @keyframes grade-fade {
   0% {
     opacity: 1;
-    transform: translateX(-50%) translateY(-6px);
+    transform: translateX(-50%) translateY(calc(-1 * var(--px)));
   }
   70% {
     opacity: 1;
@@ -343,10 +482,18 @@ kbd {
   top: 45%;
   left: 50%;
   transform: translateX(-50%);
-  font-size: 20px;
-  font-weight: 600;
-  color: #ff9c5e;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+  max-width: 80vw;
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--red),
+    0 var(--px) 0 0 var(--red),
+    calc(-1 * var(--px)) 0 0 0 var(--red),
+    var(--px) 0 0 0 var(--red);
 }
 
 .hud-countdown {
@@ -356,20 +503,18 @@ kbd {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24px;
+  gap: calc(var(--px) * 6);
 }
 
 .hud-countdown-number {
-  font-size: 120px;
-  font-weight: 800;
-  color: rgba(255, 255, 255, 0.9);
-  animation: countdown-pop 0.9s ease-out;
+  font-size: clamp(56px, 12vw, 104px);
+  color: var(--ink);
+  animation: countdown-pop 0.9s steps(6, end);
 }
 
 .hud-countdown-hint {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--muted);
+  font-size: 13px;
+  color: var(--ink-soft);
 }
 
 @keyframes countdown-pop {
@@ -391,37 +536,37 @@ kbd {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: calc(var(--px) * 2);
+  max-width: min(560px, 86vw);
+  padding: calc(var(--px) * 3) calc(var(--px) * 5);
   text-align: center;
-  animation: phase-banner 3s ease-out forwards;
+  background: var(--paper);
+  animation: phase-banner 3s steps(20, end) forwards;
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
 }
 
 .hud-phase-name {
-  font-size: clamp(24px, 4vw, 40px);
-  font-weight: 800;
-  letter-spacing: 1px;
-  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  font-size: clamp(13px, 2vw, 18px);
+  color: var(--ink);
 }
 
 .hud-phase-hint {
-  max-width: 520px;
-  font-size: 16px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-soft);
 }
 
 @keyframes phase-banner {
   0% {
     opacity: 0;
-    transform: translateX(-50%) translateY(14px);
   }
   12% {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
   }
   80% {
     opacity: 1;
@@ -433,19 +578,28 @@ kbd {
 
 .hud-status {
   position: absolute;
-  left: 24px;
-  top: 20px;
+  left: calc(var(--px) * 6);
+  top: calc(var(--px) * 5);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+  gap: var(--px);
+  align-items: flex-start;
+  font-size: 10px;
+  color: var(--ink-soft);
 }
 
-.hud-hands--duo {
-  color: var(--hot);
+/*
+ * Privacy mode is stated, not implied.
+ *
+ * Someone recording needs to check at a glance that the webcam image is not on
+ * screen, and "I cannot see it" is weaker than the game saying so — especially
+ * here, where a white background is also what it looks like when the camera has
+ * simply not started yet.
+ */
+.hud-privacy {
+  padding: calc(var(--px) / 2) var(--px);
+  color: var(--paper);
+  background: var(--ink);
 }
 
 .hud-progress {
@@ -453,199 +607,434 @@ kbd {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.15);
+  height: var(--px);
+  background: var(--paper-shade);
 }
 
 .hud-progress-fill {
   height: 100%;
-  background: var(--accent-a);
-  transition: width 0.1s linear;
+  background: var(--cyan);
+  /* Stepped, so the bar advances in whole pixels like everything else. */
+  transition: width 0.1s steps(4, end);
 }
 
+/* Score to chase. The delta is the only number here that changes meaning
+   rather than magnitude, so it is the only one that changes treatment — the
+   score itself must never look like a judgement. */
+.hud-target {
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  gap: var(--px);
+  margin-top: calc(var(--px) * 2);
+  font-size: 9px;
+}
 
-/* --------------------------------------------------------------------------
-   Pickers (beatmap and starting phase)
-   -------------------------------------------------------------------------- */
+.hud-target-label {
+  color: var(--ink-soft);
+}
+
+.hud-target-value {
+  color: var(--ink);
+}
+
+.hud-target-delta {
+  color: var(--red);
+}
+
+/* Ahead: ink on cyan, so being in front is a filled block rather than a
+   coloured word. */
+.hud-target--ahead .hud-target-delta {
+  padding: 0 calc(var(--px) / 2);
+  color: var(--ink);
+  background: var(--cyan);
+}
+
+/* ------------------------------------------------------------------ results -- */
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 3);
+  align-items: center;
+}
+
+.result-main {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--px) * 2);
+  font-family: var(--font-pixel);
+}
+
+.result-score {
+  font-size: clamp(28px, 5vw, 44px);
+  line-height: 1;
+  color: var(--ink);
+}
+
+.result-accuracy {
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.result-combo {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.result-grades {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: calc(var(--px) * 3);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+}
+
+/* Each grade is a block of its own colour with the count in ink on top. */
+.result-grade {
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2);
+  color: var(--ink);
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
+}
+
+.result-record {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.best-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 1.5);
+  margin: var(--px);
+  padding: calc(var(--px) * 3) calc(var(--px) * 7);
+  background: var(--paper-shade);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
+}
+
+.best-score-label {
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  color: var(--ink-soft);
+}
+
+.best-score-value {
+  font-family: var(--font-pixel);
+  font-size: 22px;
+  color: var(--ink);
+}
+
+.best-score-detail {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* ------------------------------------------------------------------ pickers -- */
 
 .picker {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: calc(var(--px) * 3);
 }
 
-/* One beatmap. Reset the global button styling first: these are choices, not
-   calls to action, and the gradient pill would make three of them shout over
-   the one button on the screen that actually starts the game. */
+/*
+ * One beatmap. These are choices, not calls to action: the magenta button is
+ * the only filled thing on the screen, and three cards in the same colour would
+ * bury it. The selected one is marked by a cyan frame and a cyan bar, never by
+ * cyan lettering.
+ */
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  min-width: 150px;
-  padding: 12px 18px;
-  font-size: 14px;
-  font-weight: 500;
+  gap: var(--px);
+  min-width: 176px;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  font-family: var(--font-body);
+  font-size: 12px;
   text-align: left;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--rule),
+    0 var(--px) 0 0 var(--rule),
+    calc(-1 * var(--px)) 0 0 0 var(--rule),
+    var(--px) 0 0 0 var(--rule);
 }
 
 .card:hover:not(:disabled) {
-  transform: none;
-  filter: none;
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--paper-shade);
 }
 
-.card--active {
-  background: rgba(77, 216, 255, 0.12);
-  border-color: var(--accent-a, #4dd8ff);
+.card--active,
+.card--active:hover:not(:disabled) {
+  background: var(--paper);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
+}
+
+.card--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--px) * 1.5);
+  background: var(--cyan);
 }
 
 .card-title {
-  font-size: 16px;
-  font-weight: 700;
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink);
 }
 
 .card-meta,
 .card-best {
-  font-size: 12px;
-  opacity: 0.6;
-}
-
-.card--active .card-best {
-  opacity: 0.85;
+  font-size: 11px;
+  color: var(--ink-soft);
 }
 
 .chip {
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--ink-soft);
+  background: var(--paper);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--rule),
+    0 var(--px) 0 0 var(--rule),
+    calc(-1 * var(--px)) 0 0 0 var(--rule),
+    var(--px) 0 0 0 var(--rule);
 }
 
 .chip:hover:not(:disabled) {
-  transform: none;
-  filter: none;
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+  background: var(--paper-shade);
 }
 
-.chip--active {
-  color: #06060c;
-  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
-  border-color: transparent;
+.chip--active,
+.chip--active:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--cyan);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
 }
 
-/* The start screen now has real content, so it scrolls rather than clipping
-   on a short window -- a laptop at 720p must still reach the Play button. */
+/* The start screen has real content, so it scrolls rather than clipping on a
+   short window — a laptop at 720p must still reach the Play button. */
 .overlay--start {
   justify-content: flex-start;
-  gap: 14px;
+  gap: calc(var(--px) * 3);
   overflow-y: auto;
 }
 
+/* -------------------------------------------------------------- top bar ----- */
 
-/* --------------------------------------------------------------------------
-   Target score (challenge, or your own best)
-   -------------------------------------------------------------------------- */
-
-.hud-target {
+/* Language and privacy sit together above everything else: both are decisions
+   about how the game is presented, and both are wanted before pressing play. */
+.topbar {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 4px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.75;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: calc(var(--px) * 2);
+  width: 100%;
+  max-width: 720px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--px) 0 calc(var(--px) * 2);
+  background: var(--paper);
 }
 
-.hud-target-label {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  opacity: 0.7;
+.lang {
+  display: flex;
+  gap: calc(var(--px) * 2);
 }
 
-.hud-target-value {
-  font-weight: 600;
+.chip--lang {
+  min-width: calc(var(--px) * 12);
 }
 
-/* Red while behind, green once ahead. The delta is the only number here that
-   changes meaning rather than magnitude, so it is the only one that changes
-   colour -- the score itself must never look like a judgement. */
-.hud-target-delta {
-  font-weight: 700;
-  color: #ff5566;
+/*
+ * Privacy as a switch, not just a keyboard shortcut.
+ *
+ * <kbd>V</kbd> is documented in the tips, which nobody reads before pressing
+ * play, and by the time the key would help the webcam image is already on
+ * screen — which is precisely the thing the person reaching for it did not want
+ * to happen. The decision belongs before the camera starts.
+ */
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  margin: var(--px);
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+  background: var(--paper);
+  cursor: pointer;
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--rule),
+    0 var(--px) 0 0 var(--rule),
+    calc(-1 * var(--px)) 0 0 0 var(--rule),
+    var(--px) 0 0 0 var(--rule);
 }
 
-.hud-target--ahead {
-  opacity: 1;
+.switch:hover {
+  color: var(--ink);
+  background: var(--paper-shade);
 }
 
-.hud-target--ahead .hud-target-delta {
-  color: #4dffb0;
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
+/* The box: empty, then filled with the logo's magenta and an ink tick. */
+.switch-box {
+  position: relative;
+  flex: none;
+  width: calc(var(--px) * 4);
+  height: calc(var(--px) * 4);
+  background: var(--paper);
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
+}
 
-/* --------------------------------------------------------------------------
-   Calibration
-   -------------------------------------------------------------------------- */
+.switch input:checked + .switch-box {
+  background: var(--pink);
+}
+
+/* The tick, as three stacked squares rather than a rotated rule: a rotated
+   anything is the one shape a bitmap cannot draw. */
+.switch input:checked + .switch-box::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 7px;
+  width: 2px;
+  height: 2px;
+  color: var(--ink);
+  background: currentColor;
+  box-shadow:
+    2px 2px 0 currentColor,
+    4px 4px 0 currentColor,
+    6px 2px 0 currentColor,
+    8px 0 0 currentColor,
+    10px -2px 0 currentColor;
+}
+
+.switch input:focus-visible + .switch-box {
+  outline: var(--px) solid var(--cyan);
+  outline-offset: calc(var(--px) / 2);
+}
+
+.switch--on {
+  color: var(--ink);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
+}
+
+/* ------------------------------------------------------------- calibration -- */
 
 /* The live ratio. Wide and central on purpose: it is the proof that the camera
    can see the hand, which is the question the player is actually asking. */
 .calib-bar {
   width: min(420px, 80vw);
-  height: 14px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  overflow: hidden;
+  height: calc(var(--px) * 4);
+  margin: var(--px);
+  background: var(--paper-shade);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
 }
 
 .calib-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+  background: var(--pink);
   /* No transition: this is a measurement, and smoothing it would hide the
      jitter the player needs to see. */
 }
 
 .calib-progress {
   width: min(420px, 80vw);
-  height: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  overflow: hidden;
+  height: var(--px);
+  background: var(--paper-shade);
 }
 
 .calib-progress-fill {
   height: 100%;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--ink);
 }
 
-
-/* --------------------------------------------------------------------------
-   Custom music
-   -------------------------------------------------------------------------- */
+/* ------------------------------------------------------------ custom music -- */
 
 /* Collapsed by default. Most players want the generated track and should not
    have to scroll past a file picker to reach the Play button. */
 .music {
-  width: min(460px, 88vw);
+  width: min(480px, 88vw);
+  margin: var(--px);
   text-align: left;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 14px;
+  background: var(--paper);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--rule),
+    0 var(--px) 0 0 var(--rule),
+    calc(-1 * var(--px)) 0 0 0 var(--rule),
+    var(--px) 0 0 0 var(--rule);
+}
+
+.music[open] {
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--ink),
+    0 var(--px) 0 0 var(--ink),
+    calc(-1 * var(--px)) 0 0 0 var(--ink),
+    var(--px) 0 0 0 var(--ink);
 }
 
 .music > summary {
-  padding: 10px 16px;
-  font-size: 14px;
-  font-weight: 600;
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--ink-soft);
   cursor: pointer;
   list-style: none;
+}
+
+.music > summary:hover,
+.music[open] > summary {
+  color: var(--ink);
 }
 
 .music > summary::-webkit-details-marker {
@@ -653,15 +1042,18 @@ kbd {
 }
 
 .music > summary::before {
-  content: '♪ ';
-  opacity: 0.6;
+  content: '+ ';
+}
+
+.music[open] > summary::before {
+  content: '- ';
 }
 
 .music-body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 16px 14px;
+  gap: calc(var(--px) * 3);
+  padding: 0 calc(var(--px) * 4) calc(var(--px) * 4);
 }
 
 /* The native file input is unstyleable and says "No file chosen" in whatever
@@ -672,42 +1064,138 @@ kbd {
 
 .music-file span {
   display: block;
-  padding: 9px 14px;
-  font-size: 13px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: var(--paper-shade);
   cursor: pointer;
+  box-shadow:
+    0 -2px 0 0 var(--rule),
+    0 2px 0 0 var(--rule),
+    -2px 0 0 0 var(--rule),
+    2px 0 0 0 var(--rule);
 }
 
 .music-file span:hover {
-  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
 }
 
 .music-bpm {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  font-size: 13px;
+  gap: calc(var(--px) * 2);
+  font-size: 12px;
+  color: var(--ink-soft);
 }
 
 .music-bpm input {
-  width: 74px;
-  margin-left: 6px;
-  padding: 6px 8px;
-  font: inherit;
-  color: inherit;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
+  width: 84px;
+  margin-left: var(--px);
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2);
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 0;
+  border-radius: 0;
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
 }
 
+.music-bpm input:focus {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
 
-/* Secondary actions on the pause overlay, side by side so neither reads as
-   the default. Wraps on a narrow window rather than overflowing. */
+/* Secondary actions on the pause overlay, side by side so neither reads as the
+   default. Wraps on a narrow window rather than overflowing. */
 .pause-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px;
+  gap: calc(var(--px) * 2);
+}
+
+/* ------------------------------------------------------- unsupported device -- */
+
+/*
+ * Phones get a screen of their own rather than a broken game.
+ *
+ * Most of the traffic to a link posted on LinkedIn arrives on a phone, and a
+ * webcam rhythm game cannot work on one: the camera is in the hand that is
+ * supposed to be pinching. Saying so, in one screen, is the difference between
+ * "this is not for my device" and "this is broken".
+ */
+.overlay--device {
+  justify-content: center;
+  gap: calc(var(--px) * 4);
+  overflow-y: auto;
+}
+
+.device-note {
+  max-width: 40ch;
+  margin: 0;
+  padding: calc(var(--px) * 2) calc(var(--px) * 3);
+  text-align: left;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  line-height: 1.8;
+  color: var(--ink);
+  background: var(--paper-shade);
+  border-left: var(--px) solid var(--pink);
+}
+
+.device-link {
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-underline-offset: 3px;
+}
+
+.device-link:hover {
+  color: var(--ink);
+}
+
+/* On a real phone the overlay has to breathe: the pixel font is wide, and the
+   default padding leaves nothing for the words. */
+@media (max-width: 560px) {
+  .overlay {
+    padding: calc(var(--px) * 4);
+    gap: calc(var(--px) * 3);
+  }
+
+  .topbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  button {
+    font-size: 11px;
+    padding: calc(var(--px) * 3) calc(var(--px) * 4);
+  }
+
+  .card {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* Someone who asked their system for less motion did not ask for a stepped
+   animation instead of a smooth one. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

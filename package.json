@@ -30,13 +30,14 @@
   "scripts": {
     "predev": "node scripts/copy-assets.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/copy-assets.mjs",
+    "prebuild": "node scripts/copy-assets.mjs && node scripts/make-og.mjs",
     "build": "tsc --noEmit && node scripts/check-beatmaps.mjs && vite build",
     "build:standalone": "vite build --mode standalone && node scripts/copy-standalone.mjs",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "fetch:model": "node scripts/fetch-model.mjs",
-    "check:beatmaps": "node scripts/check-beatmaps.mjs"
+    "check:beatmaps": "node scripts/check-beatmaps.mjs",
+    "build:og": "node scripts/make-og.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.14",

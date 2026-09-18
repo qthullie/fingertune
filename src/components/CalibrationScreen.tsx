@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { HandTracker } from '../lib/handTracking';
 import { computeThresholds, saveCalibration } from '../lib/calibration';
 import { settings } from '../config/settings';
+import { useT } from '../lib/i18n';
+import { Rich } from './Rich';
 
 interface Props {
   tracker: HandTracker;
@@ -24,6 +26,7 @@ const DURATION = 6;
  * hand properly for the second half.
  */
 export function CalibrationScreen({ tracker, onDone, onSkip }: Props): JSX.Element {
+  const t = useT();
   const [elapsed, setElapsed] = useState(0);
   const [ratio, setRatio] = useState(1);
   const [seen, setSeen] = useState(false);
@@ -73,13 +76,10 @@ export function CalibrationScreen({ tracker, onDone, onSkip }: Props): JSX.Eleme
   if (failed) {
     return (
       <div className="overlay overlay--pause">
-        <h1 className="title">Could not read a pinch</h1>
-        <p className="subtitle">
-          Your hand needs to be fully visible, and to actually open and close. The default
-          thresholds are still in place and the game is playable — you can try again or just go.
-        </p>
+        <h1 className="title title--plain">{t('calib.failed.title')}</h1>
+        <p className="subtitle">{t('calib.failed.body')}</p>
         <button type="button" onClick={onSkip}>
-          Play anyway
+          {t('calib.failed.play')}
         </button>
       </div>
     );
@@ -87,17 +87,16 @@ export function CalibrationScreen({ tracker, onDone, onSkip }: Props): JSX.Eleme
 
   return (
     <div className="overlay overlay--pause">
-      <h1 className="title">Calibrating</h1>
+      <h1 className="title title--plain">{t('calib.title')}</h1>
       <p className="subtitle">
-        Open your hand wide, then pinch thumb and index together. <b>Three times</b>, slowly, in
-        front of the camera.
+        <Rich>{t('calib.body')}</Rich>
       </p>
 
       <div className="calib-bar" aria-hidden="true">
         <div className="calib-bar-fill" style={{ width: `${ratioWidth}%` }} />
       </div>
       <p className="small">
-        {seen ? `Pinch ratio ${ratio.toFixed(2)}` : 'Waiting for a hand…'}
+        {seen ? t('calib.ratio', { ratio: ratio.toFixed(2) }) : t('calib.waiting')}
       </p>
 
       <div className="calib-progress" aria-hidden="true">
@@ -105,7 +104,7 @@ export function CalibrationScreen({ tracker, onDone, onSkip }: Props): JSX.Eleme
       </div>
 
       <button type="button" className="button--ghost" onClick={onSkip}>
-        Skip — use the defaults
+        {t('calib.skip')}
       </button>
     </div>
   );
