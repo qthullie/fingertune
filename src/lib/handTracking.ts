@@ -108,7 +108,9 @@ export class HandState {
       const raw = landmarks[i];
       const filter = this.filters[i];
       if (!raw || !filter) return;
-      smoothed.push(filter.filter(1 - raw.x, raw.y, tSec));
+      smoothed.push(
+        filter.filter(1 - raw.x, raw.y, tSec, settings.PREDICT_AHEAD, settings.PREDICT_MAX_STEP),
+      );
     }
 
     const thumb = smoothed[LM.THUMB_TIP];
