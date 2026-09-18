@@ -13,6 +13,9 @@ dist-standalone/
 public/mediapipe/
 public/models/
 
+# Staging directory for scripts/make-og.mjs, removed on its way out.
+.og-build/
+
 # Logs & caches
 npm-debug.log*
 yarn-error.log*

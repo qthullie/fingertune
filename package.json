@@ -30,7 +30,7 @@
   "scripts": {
     "predev": "node scripts/copy-assets.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/copy-assets.mjs && node scripts/make-og.mjs",
+    "prebuild": "node scripts/copy-assets.mjs",
     "build": "tsc --noEmit && node scripts/check-beatmaps.mjs && vite build",
     "build:standalone": "vite build --mode standalone && node scripts/copy-standalone.mjs",
     "preview": "vite preview",

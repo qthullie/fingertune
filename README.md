@@ -440,7 +440,8 @@ src/
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
 scripts/
-  make-og.mjs         draws public/og.png, the link-preview card, from the logo
+  make-og.mjs         draws public/og-card.png, the link-preview card
+  fonts/              Inter, for the card only (OFL, see scripts/fonts)
 ```
 
 ## Running fully offline

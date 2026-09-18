@@ -22,8 +22,10 @@
 
       og:image has to be an absolute URL — a crawler resolves it against
       nothing — and it has to be a raster: LinkedIn will not render an SVG. The
-      1200x630 PNG is drawn from assets/logo.svg by `npm run build:og`, which
-      the build runs, so the card can never show a logo the site does not.
+      1200x630 PNG is drawn by `npm run build:og`: the sprite comes straight out
+      of assets/logo.svg, the type is set in Inter. The filename is versioned on
+      purpose — LinkedIn caches a preview image by URL, so replacing the bytes
+      behind an address it has already fetched changes nothing.
     -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Fingertune" />
@@ -33,13 +35,13 @@
       property="og:description"
       content="Pinch your thumb and index on the beat. Hand tracked from your webcam, entirely in the browser — no upload, no account, no server."
     />
-    <meta property="og:image" content="https://qthullie.github.io/fingertune/og.png" />
+    <meta property="og:image" content="https://qthullie.github.io/fingertune/og-card.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="Pixel-art card: the Fingertune sprite, an approach ring closing on a target, next to the game's name."
+      content="The Fingertune sprite — a pixel-art approach ring closing on a target — beside the name and the line: a rhythm game you play by pinching."
     />
     <meta property="og:locale" content="en_GB" />
     <meta property="og:locale:alternate" content="fr_FR" />
@@ -50,7 +52,7 @@
       name="twitter:description"
       content="Pinch your thumb and index on the beat. Hand tracked from your webcam, entirely in the browser."
     />
-    <meta name="twitter:image" content="https://qthullie.github.io/fingertune/og.png" />
+    <meta name="twitter:image" content="https://qthullie.github.io/fingertune/og-card.png" />
   </head>
   <body>
     <div id="root"></div>
