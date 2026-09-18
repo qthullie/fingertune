@@ -224,10 +224,12 @@ while you pinch is the fastest way to pick your own numbers.
 | `PINCH_COOLDOWN_MS` | `140` | minimum delay between two triggers |
 | `OEF_MIN_CUTOFF` | `1.7` | lower = smoother cursor, more lag |
 | `OEF_BETA` | `0.02` | higher = snappier on fast moves, more jitter |
-| `MAX_HANDS` | `1` | tracked hands (2 works; the demo chart is one-handed) |
+| `MAX_HANDS` | `2` | tracked hands (Duet needs both; every other chart is one-handed) |
 | `MIN_DETECTION_CONF` / `MIN_TRACKING_CONF` | `0.5` | MediaPipe confidence gates |
 | `HAND_LOST_TIMEOUT` | `0.5 s` | grace period before a hand is forgotten |
-| `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones |
+| `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones (<kbd>S</kbd>) |
+| `SHOW_VIDEO` | `true` | draw the webcam image at all — off is privacy mode (<kbd>V</kbd>) |
+| `PIXEL_SCALE` | `1` | screen pixels per rendered pixel; above 1 the playfield goes blocky |
 | `SHOW_PINCH_METER` | `true` | live ratio gauge with both thresholds |
 | `SHOW_PLAYFIELD` | `false` | outline the area targets can occupy |
 | `SLIDER_FOLLOW_SCALE` | `2.2` | follow-circle radius: how much slack while dragging |
@@ -428,6 +430,7 @@ src/
     errors.ts         technical errors → message keys
     i18n.ts           the English and French catalogues, and the language store
     device.ts         is this a device the game can be played on at all
+    preferences.ts    the settings a player chooses, kept across visits
   config/settings.ts  every knob, mutable at runtime
   game/               engine (timing windows, score, phases), slider geometry,
                       effects, types
@@ -435,9 +438,9 @@ src/
   components/         GameCanvas (loop), Hud, Start/Error/End/Mobile screens
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
   styles.css          the pixel-art design system
+  beatmaps/           charts and phase definitions
 scripts/
   make-og.mjs         draws public/og.png, the link-preview card, from the logo
-  beatmaps/           charts and phase definitions
 ```
 
 ## Running fully offline
