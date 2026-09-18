@@ -160,6 +160,20 @@ const en = {
   'music.caveat':
     'The notes keep the beatmap’s own grid. Matching the BPM lines the spacing up with your track, but the first downbeat is not detected — if the track does not start on one, everything will sit at a constant offset. Your file never leaves this machine.',
 
+  /* -- online board -- */
+  'board.title': 'Online board',
+  'board.name': 'Name',
+  'board.placeholder': 'anon',
+  'board.submit': 'Post my score',
+  'board.sending': 'Sending…',
+  'board.submitted': 'Posted. Refresh to see the board move.',
+  'board.empty': 'Nobody has posted a score on this chart yet. Be first.',
+  'board.offline': 'The board is unreachable. Your local best is still saved.',
+  'board.timeout': 'The board did not answer in time. Your local best is still saved.',
+  'board.rejected': 'The board refused that score.',
+  'board.unverified':
+    'Scores are not verified: the game runs entirely in your browser, so anything it sends is something someone could type. Treat this as a wall to sign, not a ranking.',
+
   /* -- errors -- */
   'error.title': 'Something went wrong',
   'error.retry': 'Try again',
@@ -343,6 +357,19 @@ const fr: Record<MessageKey, string> = {
   'music.keepTapping': 'Continuez à taper…',
   'music.caveat':
     'Les notes gardent la grille de la beatmap. Régler le BPM aligne l’espacement sur votre piste, mais le premier temps n’est pas détecté — si la piste ne commence pas dessus, tout sera décalé d’une valeur constante. Votre fichier ne quitte jamais cette machine.',
+
+  'board.title': 'Classement en ligne',
+  'board.name': 'Nom',
+  'board.placeholder': 'anon',
+  'board.submit': 'Publier mon score',
+  'board.sending': 'Envoi…',
+  'board.submitted': 'Publié. Rechargez pour voir le classement bouger.',
+  'board.empty': 'Personne n’a encore publié de score sur cette carte. À vous.',
+  'board.offline': 'Classement injoignable. Votre record local reste enregistré.',
+  'board.timeout': 'Le classement n’a pas répondu à temps. Votre record local reste enregistré.',
+  'board.rejected': 'Le classement a refusé ce score.',
+  'board.unverified':
+    'Les scores ne sont pas vérifiés : le jeu tourne entièrement dans votre navigateur, donc tout ce qu’il envoie est quelque chose qu’on pourrait taper. À prendre comme un mur où l’on signe, pas comme un classement.',
 
   'error.title': 'Quelque chose a échoué',
   'error.retry': 'Réessayer',

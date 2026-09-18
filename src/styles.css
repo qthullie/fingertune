@@ -1116,6 +1116,137 @@ button:disabled {
   outline-offset: 2px;
 }
 
+/* -------------------------------------------------------------- leaderboard -- */
+
+/*
+ * The online board, on the end screen.
+ *
+ * Tabular and quiet. It sits under a score the player has just earned, so it
+ * must not compete with it: no fill, one rule, and the only pixel type is the
+ * numbers — which are the part read as shapes rather than words.
+ */
+.board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--px) * 2);
+  width: min(460px, 90vw);
+  margin: var(--px);
+  padding: calc(var(--px) * 4);
+  background: var(--paper);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--rule),
+    0 var(--px) 0 0 var(--rule),
+    calc(-1 * var(--px)) 0 0 0 var(--rule),
+    var(--px) 0 0 0 var(--rule);
+}
+
+.board-title {
+  margin: 0;
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ink-soft);
+}
+
+.board-list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.board-row {
+  display: grid;
+  grid-template-columns: calc(var(--px) * 7) 1fr auto auto;
+  align-items: baseline;
+  gap: calc(var(--px) * 2);
+  padding: calc(var(--px) * 1.5) 0;
+  font-size: 13px;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+}
+
+.board-row:last-child {
+  border-bottom: 0;
+}
+
+/* The top three get the logo's colours as a block behind the rank, which is the
+   only place on this panel colour appears at all. */
+.board-row:nth-child(1) .board-rank {
+  color: var(--ink);
+  background: var(--pink);
+}
+
+.board-row:nth-child(2) .board-rank,
+.board-row:nth-child(3) .board-rank {
+  color: var(--ink);
+  background: var(--cyan);
+}
+
+.board-rank {
+  padding: 0 calc(var(--px) / 2);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  text-align: center;
+  color: var(--ink-soft);
+}
+
+.board-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.board-score {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: var(--ink);
+}
+
+.board-detail {
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.board-submit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--px) * 2);
+}
+
+.board-field {
+  display: flex;
+  align-items: center;
+  gap: var(--px);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.board-field input {
+  width: 140px;
+  padding: calc(var(--px) * 1.5) calc(var(--px) * 2);
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 0;
+  border-radius: 0;
+  box-shadow:
+    0 -2px 0 0 var(--ink),
+    0 2px 0 0 var(--ink),
+    -2px 0 0 0 var(--ink),
+    2px 0 0 0 var(--ink);
+}
+
+.board-field input:focus {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
 /* An import that failed says why, in the words the parser used: "the archive
    contains no chart" is actionable, "import failed" is not. */
 .chart-error {
