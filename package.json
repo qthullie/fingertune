@@ -1,6 +1,6 @@
 {
   "name": "fingertune",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": false,
   "description": "An Osu!-style rhythm game played by pinching your fingers, tracked from a webcam with MediaPipe Hand Landmarker. Runs entirely in the browser.",
   "keywords": [

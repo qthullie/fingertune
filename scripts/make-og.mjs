@@ -243,7 +243,25 @@ function encodePng({ width, height, pixels }) {
 
 /* ------------------------------------------------------------------- card --- */
 
+/*
+ * The layout, and the one constraint that drives all of it: LinkedIn renders
+ * this card about 520-720px wide in a feed, so everything here is seen at
+ * roughly half size. Type that looks fine at 1200px is mush at 600px.
+ *
+ * Which means the card carries four words, not four sentences. Earlier drafts
+ * had a tagline, a privacy note and the URL at scale 3 — 21px tall on the card,
+ * 10px in the feed, unreadable, and the URL was wasted ink anyway because
+ * LinkedIn prints the domain underneath the card itself.
+ *
+ * Nothing is drawn below scale 5 (35px on the card, ~17px in the feed).
+ */
 const canvas = createCanvas(WIDTH, HEIGHT, PAPER);
+
+/** Draws `text` centred on the card at `scale`, returning its height. */
+function drawCentred(text, y, scale, color) {
+  drawText(canvas, text, Math.round((WIDTH - textWidth(text, scale)) / 2), y, scale, color);
+  return 7 * scale;
+}
 
 // Frame, drawn as four bars so the corners stay square at this size.
 const BORDER = 10;
@@ -252,21 +270,22 @@ fillRect(canvas, 0, HEIGHT - BORDER, WIDTH, BORDER, INK);
 fillRect(canvas, 0, 0, BORDER, HEIGHT, INK);
 fillRect(canvas, WIDTH - BORDER, 0, BORDER, HEIGHT, INK);
 
-// Two thin rules inside it, in the logo's own two colours.
-fillRect(canvas, BORDER, BORDER, WIDTH - BORDER * 2, 6, PINK);
-fillRect(canvas, BORDER, HEIGHT - BORDER - 6, WIDTH - BORDER * 2, 6, CYAN);
+// Two rules inside it, in the logo's own two colours.
+fillRect(canvas, BORDER, BORDER, WIDTH - BORDER * 2, 8, PINK);
+fillRect(canvas, BORDER, HEIGHT - BORDER - 8, WIDTH - BORDER * 2, 8, CYAN);
 
-drawLogo(canvas, readLogo(), 96, 155, 20);
+// The sprite, centred, at 13x — a whole number, so no pixel is half a pixel.
+const LOGO_SCALE = 13;
+drawLogo(canvas, readLogo(), Math.round((WIDTH - 16 * LOGO_SCALE) / 2), 66, LOGO_SCALE);
 
-const TEXT_X = 500;
-drawText(canvas, 'FINGERTUNE', TEXT_X, 170, 9, INK);
-drawText(canvas, 'A RHYTHM GAME YOU PLAY', TEXT_X, 275, 4, INK);
-drawText(canvas, 'BY PINCHING YOUR FINGERS', TEXT_X, 315, 4, INK);
-drawText(canvas, 'WEBCAM ONLY - NOTHING LEAVES', TEXT_X, 375, 3, SOFT);
-drawText(canvas, 'YOUR BROWSER', TEXT_X, 405, 3, SOFT);
+// The name, as large as the card will take.
+drawCentred('FINGERTUNE', 312, 13, INK);
 
-const url = 'QTHULLIE.GITHUB.IO/FINGERTUNE';
-drawText(canvas, url, WIDTH - 70 - textWidth(url, 3), 500, 3, PINK);
+// What it is. Four words, because four is what survives being halved.
+drawCentred('PINCH TO PLAY', 452, 7, INK);
+
+// The claim worth making, and the only line small enough to be secondary.
+drawCentred('WEBCAM ONLY - NOTHING IS UPLOADED', 540, 5, SOFT);
 
 const out = join(root, 'public', 'og.png');
 writeFileSync(out, encodePng(canvas));
