@@ -44,10 +44,15 @@ export class GameEngine {
   private eventId = 0;
   private handVisible = false;
   private handCount = 0;
+  private autoPaused = false;
+  /** Seconds the hand has been missing, for the auto-pause. */
+  private handLostFor = 0;
   private phaseIndex = 0;
   private phaseEventId = 0;
   /** Phases shifted by the countdown, ready to compare against `time`. */
   private phases: BeatmapPhase[] = [];
+  /** Index, in the beatmap's own phase list, that this run started from. */
+  private startPhase = 0;
 
   private t0 = 0;
   private clock: () => number = () => performance.now() / 1000;
@@ -56,6 +61,8 @@ export class GameEngine {
   private onSliderTick: (() => void) | null = null;
   private onPhaseChange: ((index: number, phase: BeatmapPhase | undefined) => void) | null = null;
   private onFinish: (() => void) | null = null;
+  private onPause: (() => void) | null = null;
+  private onResume: ((atTime: number) => void) | null = null;
 
   private listeners = new Set<Listener>();
   private snapshotCache: GameSnapshot = this.buildSnapshot();
@@ -91,6 +98,7 @@ export class GameEngine {
       time: Math.round(this.time / TIME_QUANTUM) * TIME_QUANTUM,
       duration: this.duration,
       handVisible: this.handVisible,
+      autoPaused: this.autoPaused,
     };
   }
 
@@ -110,6 +118,9 @@ export class GameEngine {
     onSliderTick: () => void;
     onPhaseChange: (index: number, phase: BeatmapPhase | undefined) => void;
     onFinish: () => void;
+    onPause?: () => void;
+    /** @param atTime the game time the run resumes at, rewind included. */
+    onResume?: (atTime: number) => void;
   }): void {
     this.clock = options.clock;
     this.onHitSound = options.onHitSound;
@@ -117,6 +128,8 @@ export class GameEngine {
     this.onSliderTick = options.onSliderTick;
     this.onPhaseChange = options.onPhaseChange;
     this.onFinish = options.onFinish;
+    this.onPause = options.onPause ?? null;
+    this.onResume = options.onResume ?? null;
   }
 
   /** Number of tracked hands, reported by the render loop. */
@@ -136,17 +149,29 @@ export class GameEngine {
    * @param startAt audio-clock instant to use as the run's t=0. Lets the music
    *                and the targets start on the very same audio sample.
    *                Defaults to now.
+   * @param fromPhase index of the phase to start at. Everything before it is
+   *                dropped and the rest slides back to zero, so starting at
+   *                Hard is a real run at Hard rather than a fast-forward: the
+   *                countdown, the music and the notes all still line up.
    */
-  start(beatmap: Beatmap, startAt?: number): void {
+  start(beatmap: Beatmap, startAt?: number, fromPhase = 0): void {
     this.beatmap = beatmap;
 
-    // Phases are shifted by the countdown, exactly like the notes.
-    this.phases = beatmap.phases
-      .map((phase) => ({ ...phase, start: phase.start + settings.COUNTDOWN }))
-      .sort((a, b) => a.start - b.start);
+    const sorted = [...beatmap.phases].sort((a, b) => a.start - b.start);
+    const index = Math.max(0, Math.min(fromPhase, sorted.length - 1));
+    // Seconds cut from the front of the map.
+    const skip = sorted[index]?.start ?? 0;
+    this.startPhase = index;
 
-    this.targets = beatmap.notes.map((note, i) => {
-      const t = note.t + settings.COUNTDOWN;
+    // Phases are shifted by the countdown, exactly like the notes.
+    this.phases = sorted
+      .slice(index)
+      .map((phase) => ({ ...phase, start: phase.start - skip + settings.COUNTDOWN }));
+
+    this.targets = beatmap.notes
+      .filter((note) => note.t >= skip)
+      .map((note, i) => {
+      const t = note.t - skip + settings.COUNTDOWN;
       const phaseIndex = this.phaseIndexAt(t);
       const phase = this.phases[phaseIndex];
       const windowScale = phase?.hitWindowScale ?? 1;
@@ -193,11 +218,13 @@ export class GameEngine {
     this.lastOffsetMs = 0;
     this.time = 0;
     this.phase = 'playing';
+    this.autoPaused = false;
+    this.handLostFor = 0;
     this.phaseIndex = 0;
     this.phaseEventId += 1;
     this.t0 = startAt ?? this.clock();
     this.publish();
-    this.onPhaseChange?.(0, this.phases[0]);
+    this.onPhaseChange?.(this.startPhase, this.phases[0]);
   }
 
   /** Index of the phase active at game time `t` (countdown included). */
@@ -261,14 +288,102 @@ export class GameEngine {
   }
 
   /**
+   * Freezes the run.
+   *
+   * Game time is `clock() - t0` against an audio clock that never stops, so
+   * pausing is not a matter of stopping anything: `time` simply stops being
+   * recomputed, and resuming rebases `t0` on whatever the clock says then.
+   * Nothing drifts, because nothing was integrating.
+   *
+   * @param auto true when the hand was lost rather than the player asking.
+   */
+  pause(auto = false): void {
+    if (this.phase !== 'playing') return;
+    this.phase = 'paused';
+    this.autoPaused = auto;
+    this.onPause?.();
+    this.publish();
+  }
+
+  /**
+   * Resumes, a beat or so before where it stopped.
+   *
+   * Dropping the player back exactly where they left off hands them a note
+   * already halfway under its ring, which reads as the game cheating. Targets
+   * already judged carry `dead`, so rewinding replays empty space rather than
+   * re-judging anything.
+   */
+  resume(): void {
+    if (this.phase !== 'paused') return;
+    const at = Math.max(0, this.time - settings.RESUME_REWIND);
+    this.time = at;
+    this.t0 = this.clock() - at;
+    this.autoPaused = false;
+    this.handLostFor = 0;
+    this.phase = 'playing';
+    this.onResume?.(at);
+    this.publish();
+  }
+
+  /**
+   * Ends the run without judging it.
+   *
+   * Distinct from `finish()`, which is a run reaching its end and therefore
+   * produces a score. Walking out halfway has no score to submit -- writing one
+   * would put an abandoned attempt into the high-score table, and the number
+   * that matters most on this screen is the one you can trust.
+   *
+   * Targets are dropped so the canvas has nothing left to draw behind the menu.
+   */
+  abandon(): void {
+    if (this.phase === 'idle') return;
+    this.phase = 'idle';
+    this.autoPaused = false;
+    this.handLostFor = 0;
+    this.targets = [];
+    this.effects.clear();
+    this.publish();
+  }
+
+  togglePause(): void {
+    if (this.phase === 'playing') this.pause();
+    else if (this.phase === 'paused') this.resume();
+  }
+
+  /**
    * Turns overdue targets into misses, ages the effects, publishes the snapshot.
    * @param dt render seconds elapsed (particles only).
    */
   update(dt: number): void {
+    if (this.phase === 'paused') {
+      // A run paused *for* the player resumes on its own when the reason goes
+      // away. Making them find a key to undo something they never chose would
+      // be a second interruption on top of the first.
+      if (this.autoPaused && this.handVisible) this.resume();
+      else if (this.snapshotDirty) this.publish();
+      return;
+    }
+
     if (this.phase !== 'playing') {
       this.effects.update(dt);
       if (this.snapshotDirty) this.publish();
       return;
+    }
+
+    /* Auto-pause. Judged against render time rather than a frame count, so it
+       means the same thing on a 30 fps laptop as on a 144 Hz screen.
+
+       Not during the countdown: that is precisely the moment a hand is still
+       on its way up, and pausing there means the run stops itself before it
+       has begun -- which reads as the game being broken, not as a courtesy. */
+    if (this.handVisible || this.time < settings.COUNTDOWN) {
+      this.handLostFor = 0;
+    } else {
+      this.handLostFor += dt;
+      if (this.handLostFor > settings.AUTO_PAUSE_AFTER) {
+        this.pause(true);
+        return;
+      }
     }
 
     // Phase change: banner plus a step up in musical intensity.
@@ -277,7 +392,7 @@ export class GameEngine {
       this.phaseIndex = phaseIndex;
       this.phaseEventId += 1;
       this.snapshotDirty = true;
-      this.onPhaseChange?.(phaseIndex, this.phases[phaseIndex]);
+      this.onPhaseChange?.(this.startPhase + phaseIndex, this.phases[phaseIndex]);
     }
 
     for (const target of this.targets) {

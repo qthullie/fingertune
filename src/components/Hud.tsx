@@ -3,6 +3,8 @@ import type { GameSnapshot } from '../game/types';
 
 interface Props {
   snapshot: GameSnapshot;
+  /** Score to chase: a challenge link if there is one, otherwise your best. */
+  target: { score: number; label: string } | null;
 }
 
 /**
@@ -12,7 +14,7 @@ interface Props {
  * The snapshot is only republished at ~20 Hz (see GameEngine), so this component
  * does not rerender 60 times a second.
  */
-export function Hud({ snapshot }: Props): JSX.Element | null {
+export function Hud({ snapshot, target }: Props): JSX.Element | null {
   if (snapshot.phase !== 'playing') return null;
 
   // Game time starts slightly negative (t=0 is scheduled a few ms ahead so the
@@ -24,12 +26,28 @@ export function Hud({ snapshot }: Props): JSX.Element | null {
   const progress = snapshot.duration > 0 ? Math.min(snapshot.time / snapshot.duration, 1) : 0;
   const grade = snapshot.lastGrade ? GRADE_STYLE[snapshot.lastGrade] : null;
   const offset = snapshot.lastOffsetMs;
+  // Signed, so it reads as a race rather than as a number to interpret.
+  const delta = target ? snapshot.score - target.score : 0;
 
   return (
     <div className="hud" aria-live="off">
       <div className="hud-score">
         <div className="hud-score-value">{String(snapshot.score).padStart(7, '0')}</div>
         <div className="hud-accuracy">{snapshot.accuracy.toFixed(2)} %</div>
+
+        {/* The best score was already stored per beatmap and never shown while
+            it mattered. Sitting under the live score it turns a solo run into
+            a race -- against yourself, or against whoever sent the link. */}
+        {target && (
+          <div className={`hud-target${delta >= 0 ? ' hud-target--ahead' : ''}`}>
+            <span className="hud-target-label">{target.label}</span>
+            <span className="hud-target-value">{target.score.toLocaleString()}</span>
+            <span className="hud-target-delta">
+              {delta >= 0 ? '+' : ''}
+              {delta.toLocaleString()}
+            </span>
+          </div>
+        )}
       </div>
 
       {snapshot.combo > 0 && (

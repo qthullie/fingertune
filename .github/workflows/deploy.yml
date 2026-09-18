@@ -16,9 +16,20 @@ permissions:
   pages: write
   id-token: write
 
+# `cancel-in-progress: false` on purpose, and it is the opposite of what the
+# setting is usually for.
+#
+# A Pages deployment is not confined to this workflow: `deploy-pages` asks
+# GitHub to publish and then waits for that to finish elsewhere. Cancelling the
+# job mid-flight therefore abandons a deployment that the Pages pipeline still
+# considers live, and every later one queues behind it -- which shows up here
+# as `deployment_queued` forever, then a timeout, on a build that succeeded.
+#
+# Two pushes in quick succession is all it takes. The cost of not cancelling is
+# one redundant build; the cost of cancelling is a stuck queue.
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -53,3 +64,8 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v5
+        with:
+          # Ten minutes is the default, and it is the value that timed out. The
+          # Pages queue can genuinely take longer after it has been disturbed,
+          # and failing early on a build that is fine helps nobody.
+          timeout: 1200000

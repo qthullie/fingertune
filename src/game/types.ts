@@ -2,7 +2,7 @@
 
 export type Grade = 'PERFECT' | 'GOOD' | 'MISS';
 
-export type GamePhase = 'idle' | 'playing' | 'finished';
+export type GamePhase = 'idle' | 'playing' | 'paused' | 'finished';
 
 /**
  * What a note asks for.
@@ -30,6 +30,18 @@ export interface BeatmapNote {
   path?: ReadonlyArray<Vec2>;
   /** Slider travel time, in seconds. */
   duration?: number;
+  /**
+   * Which hand a two-handed map intends for this note.
+   *
+   * Authoring metadata, not a rule: the engine hit-tests on position alone, so
+   * any hand may take any note. Enforcing it would mean judging a correct hit
+   * as wrong because the wrong hand made it, on handedness that MediaPipe
+   * reports from a mirrored image and sometimes gets wrong.
+   *
+   * What it is for: the playability check applies its minimum spacing per
+   * hand, so two notes meant for different hands are allowed to overlap.
+   */
+  hand?: 'left' | 'right';
 }
 
 /**
@@ -134,6 +146,8 @@ export interface GameSnapshot {
   duration: number;
   /** At least one hand is being tracked. */
   handVisible: boolean;
+  /** True when the pause was triggered by losing the hand, not by the player. */
+  autoPaused: boolean;
   /** Number of hands currently tracked. */
   handCount: number;
   /** Current beatmap phase. */
