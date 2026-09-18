@@ -4,12 +4,17 @@
  *
  * This module knows nothing about the game: it exposes `HandState` objects with
  * a normalised pinch position and a `justPinched` rising edge.
+ *
+ * Inference runs in a worker when the browser allows it (see handWorker.ts) and
+ * inline otherwise. Both paths feed the same state machines through
+ * `applyDetection`, so the game cannot tell which one it got.
  */
 
 import { FilesetResolver, HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
 import { Point2DFilter } from './oneEuro';
 import { assets, settings } from '../config/settings';
 import type { Vec2 } from '../game/types';
+import type { WorkerFrame, WorkerInit, WorkerResponse } from './handWorker';
 
 /** The landmarks the decision uses (out of the 21 MediaPipe reports). */
 export const LM = {
@@ -191,40 +196,131 @@ export class TrackingError extends Error {
   }
 }
 
+/** One model output, whichever side of the thread boundary produced it. */
+interface Detection {
+  landmarks: NormalizedLandmark[][];
+  handedness: Array<Handedness | null>;
+}
+
+/**
+ * Spawns the inference worker and resolves once its model is loaded.
+ *
+ * It rejects rather than resolving into a half-working state, so the caller can
+ * fall back to inline inference — slower, but never silently broken.
+ */
+function startWorker(options: Omit<WorkerInit, 'type'>): Promise<Worker> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./handWorker.ts', import.meta.url), { type: 'module' });
+
+    const cleanup = (): void => {
+      worker.removeEventListener('message', onMessage as EventListener);
+      worker.removeEventListener('error', onError as EventListener);
+    };
+    const onMessage = (event: MessageEvent<WorkerResponse>): void => {
+      if (event.data.type === 'ready') {
+        cleanup();
+        resolve(worker);
+      } else if (event.data.type === 'failed') {
+        cleanup();
+        worker.terminate();
+        reject(new Error(event.data.message));
+      }
+    };
+    const onError = (event: ErrorEvent): void => {
+      cleanup();
+      worker.terminate();
+      reject(new Error(event.message || 'worker failed to start'));
+    };
+
+    worker.addEventListener('message', onMessage as EventListener);
+    worker.addEventListener('error', onError as EventListener);
+    worker.postMessage({ type: 'init', ...options } satisfies WorkerInit);
+  });
+}
+
 export class HandTracker {
   readonly hands: HandState[] = [];
   video: HTMLVideoElement | null = null;
 
-  private landmarker: HandLandmarker | null = null;
+  /**
+   * Where inference happens.
+   *
+   * The worker is the fast path and the only one that keeps the render loop at
+   * 60 fps. `inline` is the fallback for a browser without module workers or
+   * `createImageBitmap`, and for a worker that fails to start — a game that
+   * runs badly is worth more than a game that refuses to run.
+   */
+  private worker: Worker | null = null;
+  private inline: HandLandmarker | null = null;
+
+  /** True while a frame is with the worker. This is the whole flow control. */
+  private pending = false;
+  private seq = 0;
+  private latest: Detection | null = null;
   private stream: MediaStream | null = null;
   private lastVideoTime = -1;
 
   get modelReady(): boolean {
-    return this.landmarker !== null;
+    return this.worker !== null || this.inline !== null;
   }
 
   get cameraReady(): boolean {
     return this.video !== null && this.video.videoWidth > 0;
   }
 
+  /** True when inference is running off the main thread. */
+  get threaded(): boolean {
+    return this.worker !== null;
+  }
+
   /** Loads the wasm runtime and the model. Idempotent. */
   async loadModel(onProgress?: (step: LoadingStep) => void): Promise<void> {
-    if (this.landmarker) return;
-    try {
-      onProgress?.('runtime');
-      const fileset = await FilesetResolver.forVisionTasks(assets.wasmPath);
+    if (this.modelReady) return;
 
-      onProgress?.('model');
-      this.landmarker = await HandLandmarker.createFromOptions(fileset, {
-        baseOptions: { modelAssetPath: assets.modelUrl, delegate: 'GPU' },
-        runningMode: 'VIDEO',
-        numHands: settings.MAX_HANDS,
-        minHandDetectionConfidence: settings.MIN_DETECTION_CONF,
-        minHandPresenceConfidence: settings.MIN_PRESENCE_CONF,
-        minTrackingConfidence: settings.MIN_TRACKING_CONF,
-      });
-    } catch (err) {
-      throw new TrackingError('MODEL_LOAD_FAILED', 'Could not load the hand model', err);
+    onProgress?.('runtime');
+    const options = {
+      wasmPath: assets.wasmPath,
+      modelUrl: assets.modelUrl,
+      numHands: settings.MAX_HANDS,
+      minDetectionConfidence: settings.MIN_DETECTION_CONF,
+      minPresenceConfidence: settings.MIN_PRESENCE_CONF,
+      minTrackingConfidence: settings.MIN_TRACKING_CONF,
+    };
+
+    onProgress?.('model');
+    if (settings.THREADED_INFERENCE && typeof createImageBitmap === 'function') {
+      try {
+        this.worker = await startWorker(options);
+      } catch (err) {
+        // Falling back rather than failing: a worker can be blocked by a COEP
+        // header, by an extension, or by a browser without module workers, and
+        // none of that is a reason to refuse to run.
+        console.warn('[fingertune] inference worker unavailable, running inline:', err);
+        this.worker = null;
+      }
+    }
+
+    if (this.worker) {
+      this.worker.onmessage = (event: MessageEvent<WorkerResponse>): void => {
+        const message = event.data;
+        if (message.type !== 'result') return;
+        this.pending = false;
+        this.latest = { landmarks: message.landmarks, handedness: message.handedness };
+      };
+    } else {
+      try {
+        const fileset = await FilesetResolver.forVisionTasks(assets.wasmPath);
+        this.inline = await HandLandmarker.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: assets.modelUrl, delegate: 'GPU' },
+          runningMode: 'VIDEO',
+          numHands: options.numHands,
+          minHandDetectionConfidence: options.minDetectionConfidence,
+          minHandPresenceConfidence: options.minPresenceConfidence,
+          minTrackingConfidence: options.minTrackingConfidence,
+        });
+      } catch (err) {
+        throw new TrackingError('MODEL_LOAD_FAILED', 'Could not load the hand model', err);
+      }
     }
 
     for (let i = this.hands.length; i < settings.MAX_HANDS; i++) {
@@ -267,52 +363,90 @@ export class HandTracker {
   }
 
   /**
-   * Runs detection on the current video frame. Call once per render frame; it
-   * skips automatically when the webcam has not produced a new image.
+   * Advances tracking by one render frame.
+   *
+   * Two halves that do not wait for each other, which is the whole point of the
+   * worker: results are applied whenever they turn up, frames are submitted
+   * whenever the camera has a new one. A slow inference then slows the tracking
+   * without ever slowing the drawing.
    *
    * @param tSec game clock (for smoothing)
    * @param nowMs performance.now() (timestamp MediaPipe requires)
    */
   detect(tSec: number, nowMs: number): void {
     const video = this.video;
-    if (!video || !this.landmarker || video.videoWidth === 0) return;
+    if (!video || video.videoWidth === 0) return;
 
     // `justPinched` is a rising edge, valid for ONE render frame. The webcam runs
     // at ~30 fps against a 60 fps loop: without this clear, the flag would still
     // be standing next frame and one pinch would trigger two hits.
     for (const hand of this.hands) hand.justPinched = false;
 
+    // 1. Whatever the worker finished since the last frame.
+    if (this.latest) {
+      const { landmarks, handedness } = this.latest;
+      this.latest = null;
+      this.applyDetection(landmarks, handedness, tSec, nowMs);
+    }
+
+    // 2. A new camera frame, if there is one and the pipeline is free.
     if (video.currentTime === this.lastVideoTime) return;
     this.lastVideoTime = video.currentTime;
 
-    let landmarks: NormalizedLandmark[][] = [];
-    let handednesses: Array<Array<{ categoryName: string }>> = [];
-    try {
-      const result = this.landmarker.detectForVideo(video, nowMs);
-      landmarks = result.landmarks;
-      handednesses = result.handednesses;
-    } catch {
-      return; // invalid frame: skip it, the next one recovers
+    if (this.worker) {
+      // Still chewing: skip this frame rather than queue it. A queue here would
+      // mean the model works through images the player has already moved past.
+      if (this.pending) return;
+      this.pending = true;
+      const seq = ++this.seq;
+      void createImageBitmap(video).then(
+        (bitmap) => {
+          const frame: WorkerFrame = { type: 'frame', bitmap, timestamp: nowMs, seq };
+          this.worker?.postMessage(frame, [bitmap]);
+        },
+        () => {
+          this.pending = false;
+        },
+      );
+      return;
     }
 
-    // Stable slot assignment: the left hand keeps slot 0, the right one slot 1.
-    // Without this, MediaPipe can swap detection order between frames and the
-    // smoothing filters would jump from one hand to the other.
+    if (!this.inline) return;
+    try {
+      const result = this.inline.detectForVideo(video, nowMs);
+      this.applyDetection(result.landmarks, readHandedness(result.handednesses), tSec, nowMs);
+    } catch {
+      // invalid frame: skip it, the next one recovers
+    }
+  }
+
+  /**
+   * Feeds one detection into the per-hand state machines.
+   *
+   * Stable slot assignment: the left hand keeps slot 0, the right one slot 1.
+   * Without this, MediaPipe can swap detection order between frames and the
+   * smoothing filters would jump from one hand to the other.
+   */
+  private applyDetection(
+    landmarks: NormalizedLandmark[][],
+    handedness: Array<Handedness | null>,
+    tSec: number,
+    nowMs: number,
+  ): void {
     const assigned = new Map<number, { lm: NormalizedLandmark[]; handedness: Handedness | null }>();
     for (let i = 0; i < landmarks.length; i++) {
       const lm = landmarks[i];
       if (!lm) continue;
-      const raw = handednesses[i]?.[0]?.categoryName;
-      const handedness: Handedness | null = raw === 'Left' || raw === 'Right' ? raw : null;
+      const side = handedness[i] ?? null;
 
-      let slot = this.hands.length > 1 && handedness === 'Right' ? 1 : 0;
+      let slot = this.hands.length > 1 && side === 'Right' ? 1 : 0;
       if (assigned.has(slot)) {
         // Collision (same handedness twice, or a single tracked hand): take the
         // first free slot instead.
         slot = this.hands.findIndex((_, index) => !assigned.has(index));
         if (slot < 0) continue;
       }
-      assigned.set(slot, { lm, handedness });
+      assigned.set(slot, { lm, handedness: side });
     }
 
     for (let i = 0; i < this.hands.length; i++) {
@@ -337,13 +471,27 @@ export class HandTracker {
     for (const hand of this.hands) hand.reset();
   }
 
-  /** Releases the webcam (useful when tearing the app down). */
+  /** Releases the webcam and the worker (useful when tearing the app down). */
   dispose(): void {
     this.stream?.getTracks().forEach((track) => track.stop());
     this.stream = null;
     this.video = null;
-    this.landmarker?.close();
-    this.landmarker = null;
+    this.worker?.terminate();
+    this.worker = null;
+    this.inline?.close();
+    this.inline = null;
+    this.latest = null;
+    this.pending = false;
     this.lastVideoTime = -1;
   }
+}
+
+/** MediaPipe's per-hand category list, reduced to the side or nothing. */
+function readHandedness(
+  categories: Array<Array<{ categoryName: string }>>,
+): Array<Handedness | null> {
+  return categories.map((entry) => {
+    const name = entry[0]?.categoryName;
+    return name === 'Left' || name === 'Right' ? name : null;
+  });
 }

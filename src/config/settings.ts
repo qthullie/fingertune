@@ -93,6 +93,24 @@ export interface Settings {
    */
   PREDICT_MAX_STEP: number;
 
+  /**
+   * Run MediaPipe in a Web Worker instead of on the render thread.
+   *
+   * `detectForVideo` is synchronous and costs 8-20 ms. Called from the render
+   * loop it eats most of a 60 fps frame budget, which is why the game used to
+   * be smooth until a hand appeared — the only moment that matters.
+   *
+   * Off by way of a flag rather than unconditionally, because the worker can be
+   * blocked by a COEP header or an extension; the tracker falls back to inline
+   * inference on its own when that happens, and `HandTracker.threaded` reports
+   * which path is live (press D).
+   *
+   * The trade is honest: a result arrives one hop later than the frame it
+   * describes. That is worth it only because latency is the part the game can
+   * compensate for — see PREDICT_AHEAD — while a dropped frame is gone.
+   */
+  THREADED_INFERENCE: boolean;
+
   /* ---- Hand tracking ------------------------------------------------------------- */
   /** Hands tracked. 1 by default; the whole pipeline already loops over N hands. */
   MAX_HANDS: number;
@@ -204,6 +222,8 @@ export const settings: Settings = {
   OEF_MIN_CUTOFF: 1.7,
   OEF_BETA: 0.02,
   OEF_D_CUTOFF: 1.0,
+
+  THREADED_INFERENCE: true,
 
   PREDICT_AHEAD: 0.045,
   PREDICT_MAX_STEP: 0.06,
