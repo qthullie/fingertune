@@ -66,6 +66,8 @@ tab. No frame, no landmark, no score ever leaves the machine.
   - [Tuning and diagnosis](#tuning-and-diagnosis)
 - [Beyond the game: pinch as a pointing device](#beyond-the-game-pinch-as-a-pointing-device)
 - [The game around it](#the-game-around-it)
+- [Bring your own charts](#bring-your-own-charts)
+- [Online board](#online-board)
 - [Quick start](#quick-start)
 - [Project layout](#project-layout)
 - [Running fully offline](#running-fully-offline)
@@ -208,8 +210,42 @@ and hit windows stay aligned with the music.
 What that clock cannot recover is the delay already baked into the input:
 webcam exposure and USB transfer, then inference, then the browser's audio output
 buffer. The pipeline measures the pinch when it *sees* it, which is inevitably
-after it happened. If everything reads late on your machine, shorten
-`APPROACH_TIME` to compensate.
+after it happened — 40 to 80 ms on a laptop. Two things attack that, and they
+attack different halves of it.
+
+**Inference runs in a Web Worker.** `detectForVideo` is synchronous and costs
+8-20 ms. Called from the render loop, that came straight out of a 16.6 ms frame
+budget, so the game was smooth right up until a hand appeared — the only moment
+that matters. The model now lives in
+[`src/lib/handWorker.ts`](src/lib/handWorker.ts); the main thread hands over an
+`ImageBitmap` and takes back 21 points.
+
+Flow control is a single boolean: while a frame is with the worker, no other is
+sent. A queue here would mean the model grinding through images the player has
+already moved past, so tracking would fall *further* behind the harder the
+machine struggled — the opposite of what a struggling machine needs. And the
+worker is never required: a COEP header, an extension, or a browser without
+module workers all end in inline inference and a console warning, because a game
+that runs badly beats a game that refuses. Press <kbd>D</kbd> to see which path
+is live.
+
+**The cursor is projected forward.** Threading removes the stutter but adds a
+hop, so the remaining latency is met with dead reckoning: the cursor is moved
+along its own velocity by `PREDICT_AHEAD` seconds, 45 ms by default. That
+velocity is not a new computation — the One-Euro filter already keeps a smoothed
+derivative to choose its cutoff, and a second, differently-smoothed estimate
+would disagree with the filter it sits on top of.
+
+Prediction has exactly one failure mode and it is sharp: the instant a hand
+reverses, the velocity still points the old way and the cursor is flung further
+in the wrong direction than the lag it was correcting. `PREDICT_MAX_STEP` caps a
+single frame's extrapolation below the width of a target, so the worst case is a
+near miss rather than a lurch across the playfield.
+
+Tune it against your own machine rather than against a number: press <kbd>D</kbd>
+and watch the reported offset on your hits. Consistently late, raise
+`PREDICT_AHEAD`; consistently early, lower it. At `0` this is the behaviour from
+before any of it.
 
 ### Tuning and diagnosis
 
@@ -227,6 +263,9 @@ while you pinch is the fastest way to pick your own numbers.
 | `MAX_HANDS` | `2` | tracked hands (Duet needs both; every other chart is one-handed) |
 | `MIN_DETECTION_CONF` / `MIN_TRACKING_CONF` | `0.5` | MediaPipe confidence gates |
 | `HAND_LOST_TIMEOUT` | `0.5 s` | grace period before a hand is forgotten |
+| `THREADED_INFERENCE` | `true` | run MediaPipe in a Web Worker (falls back inline on its own) |
+| `PREDICT_AHEAD` | `0.045 s` | how far ahead the cursor is projected — raise it if hits read late |
+| `PREDICT_MAX_STEP` | `0.06` | ceiling on one frame's extrapolation, so a reversal cannot lurch |
 | `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones (<kbd>S</kbd>) |
 | `SHOW_VIDEO` | `true` | draw the webcam image at all — off is privacy mode (<kbd>V</kbd>) |
 | `PIXEL_SCALE` | `1` | screen pixels per rendered pixel; above 1 the playfield goes blocky |
@@ -388,6 +427,73 @@ Shortcuts: <kbd>Space</kbd> pause · <kbd>R</kbd> replay · <kbd>V</kbd> privacy
 mode · <kbd>S</kbd> skeleton · <kbd>M</kbd> metronome · <kbd>P</kbd> pinch gauge ·
 <kbd>F</kbd> playfield · <kbd>D</kbd> debug.
 
+## Bring your own charts
+
+Authoring a beatmap costs an evening per minute of music, so a game that ships
+four of them has four forever. osu! and StepMania between them have a public
+library of hundreds of thousands, in plain-text formats that have barely moved
+in a decade and that ask for close enough to the same thing: hit this, on this
+beat, then drag along that.
+
+Drop an **`.osz`**, **`.osu`**, **`.sm`** or **`.zip`** on the start screen. An
+archive is read in the tab — chart *and* audio — which is what makes it one drag
+instead of three: the chart names its track, and nothing else can find that file.
+Nothing is uploaded, same as the rest of the game.
+
+It is a conversion, not an emulation, and the parsers are explicit wherever they
+make a decision the mapper did not:
+
+| | osu! ([`osu.ts`](src/lib/osu.ts)) | StepMania ([`stepmania.ts`](src/lib/stepmania.ts)) |
+| --- | --- | --- |
+| Notes | circles map exactly | taps map exactly |
+| Paths | sliders walked as polylines through their control points: straight ones exact, curves cut the corner | holds become short downward drags |
+| Difficulty | AR, OD and CS through osu!'s own published formulas | fixed, since a stepchart has no equivalent |
+| Dropped | spinners | mines, rolls, lifts |
+| Invented | nothing | the vertical axis: lanes become columns, height is a slow wave |
+
+Two caveats worth knowing before blaming the importer. osu! is played with a
+tablet and this is played with a hand in the air, so a chart that is comfortable
+there is usually a tier harder here. And a `.osz` holds every difficulty at once:
+the import takes the first by name and tells you which, so unzip and pick another
+if it took the wrong one.
+
+The zip reader ([`zip.ts`](src/lib/zip.ts)) is ~150 lines rather than a
+dependency — the browser already ships the inflater, and what was left was a
+directory walk. Zip64, encryption and unknown compression methods each throw a
+named error instead of returning half a chart.
+
+## Online board
+
+Optional, and absent unless configured. Local bests are invisible to everyone but
+the person who set them, so the end screen can also post a run to a shared board
+per chart.
+
+```bash
+# 1. create the table, in the Supabase SQL editor
+supabase/migrations/0001_scores.sql
+
+# 2. .env.local
+VITE_SUPABASE_URL=https://yourproject.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+```
+
+**The security boundary is the SQL, not the key.** The anon key ships inside the
+JavaScript bundle — that is what "anon" means — so the migration is written
+assuming an attacker already has it, because everyone does. Reads are public.
+Inserts are allowed and constrained by table checks that refuse impossible rows.
+There is deliberately no `update` and no `delete` policy: with row-level security
+on, an operation without a policy is denied, and that omission is what stops
+anyone rewriting or erasing somebody else's run.
+
+**Scores are not verified and cannot be.** The game runs entirely in your
+browser, so any number it sends is a number somebody could have typed instead.
+Verifying would mean running the whole judging pipeline a second time, on a
+server this project does not have. Rather than imply a rigour that is not there,
+the board says so on screen: it is a wall to sign, not a ranking.
+
+With no URL configured the component renders nothing at all. A missing backend is
+a working configuration here, not a degraded one.
+
 ## Quick start
 
 The game is already live at
@@ -428,6 +534,12 @@ src/
     audio.ts          Tone.js: reference clock, generated soundtrack, hit/miss sounds
     highscores.ts     localStorage best scores
     errors.ts         technical errors → message keys
+    handWorker.ts     MediaPipe in a Web Worker, off the render thread
+    osu.ts            .osu charts -> beatmaps
+    stepmania.ts      .sm charts -> beatmaps
+    chartImport.ts    sniffing, unzipping and audio hookup for a dropped file
+    zip.ts            just enough ZIP to open an .osz, no dependency
+    leaderboard.ts    the optional online board (Supabase over plain fetch)
     i18n.ts           the English and French catalogues, and the language store
     device.ts         is this a device the game can be played on at all
     preferences.ts    the settings a player chooses, kept across visits
@@ -439,6 +551,8 @@ src/
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
+supabase/
+  migrations/         the board's table, its constraints and its RLS policies
 scripts/
   make-og.mjs         draws public/og-card.png, the link-preview card
   fonts/              Inter, for the card only (OFL, see scripts/fonts)
