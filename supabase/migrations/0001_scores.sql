@@ -59,3 +59,72 @@ drop policy if exists "anyone may add a score" on public.scores;
 create policy "anyone may add a score"
   on public.scores for insert
   with check (true);
+
+-- ---------------------------------------------------------------------------
+-- One row per name, per chart: the best one.
+--
+-- Two problems, one mechanism.
+--
+-- The first is spam. RLS can say who may insert; it cannot say how often, so a
+-- script in a loop would otherwise grow this table without limit. Folding every
+-- run by the same name into a single row means a thousand posts leave one line.
+--
+-- The second is that the board would be useless without it. Someone who plays a
+-- chart twenty times would hold the whole top twenty, and a leaderboard showing
+-- one person's afternoon is not a leaderboard.
+--
+-- The trigger is SECURITY DEFINER because it performs an UPDATE, and the anon
+-- role has no update policy — deliberately, so that a client cannot rewrite a
+-- row directly. The update happens here instead, as the table owner, under
+-- logic nobody outside this file controls. `search_path` is pinned, which is
+-- the thing a SECURITY DEFINER function must never leave to chance.
+--
+-- Names are compared case-insensitively, so "Bob" cannot sit beside "bob".
+-- ---------------------------------------------------------------------------
+
+create unique index if not exists scores_one_per_name_idx
+  on public.scores (beatmap, lower(name));
+
+create or replace function public.keep_best_score()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  existing public.scores%rowtype;
+begin
+  select * into existing
+    from public.scores
+   where beatmap = new.beatmap
+     and lower(name) = lower(new.name)
+   for update;
+
+  -- First run under this name on this chart: let the insert through.
+  if not found then
+    return new;
+  end if;
+
+  -- Better than what is there: overwrite it in place.
+  if new.score > existing.score then
+    update public.scores
+       set score      = new.score,
+           accuracy   = new.accuracy,
+           max_combo  = new.max_combo,
+           name       = new.name,
+           created_at = now()
+     where id = existing.id;
+  end if;
+
+  -- Returning NULL from a BEFORE INSERT trigger cancels the insert. Worse runs
+  -- are therefore accepted by the API and quietly change nothing, which is the
+  -- correct outcome: the client re-reads the board straight afterwards and sees
+  -- the truth rather than a confirmation of something that did not happen.
+  return null;
+end;
+$$;
+
+drop trigger if exists scores_keep_best on public.scores;
+create trigger scores_keep_best
+  before insert on public.scores
+  for each row execute function public.keep_best_score();

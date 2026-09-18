@@ -485,6 +485,12 @@ There is deliberately no `update` and no `delete` policy: with row-level securit
 on, an operation without a policy is denied, and that omission is what stops
 anyone rewriting or erasing somebody else's run.
 
+**One row per name, per chart.** RLS can say who may insert; it cannot say how
+often, so a trigger folds every run by the same name into a single best. That
+bounds what a script in a loop can do to the table, and it fixes the bigger
+problem: without it, somebody who plays a chart twenty times holds the entire
+top twenty, and a board showing one person's afternoon is not a board.
+
 **Scores are not verified and cannot be.** The game runs entirely in your
 browser, so any number it sends is a number somebody could have typed instead.
 Verifying would mean running the whole judging pipeline a second time, on a
