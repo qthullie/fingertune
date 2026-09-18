@@ -128,3 +128,95 @@ drop trigger if exists scores_keep_best on public.scores;
 create trigger scores_keep_best
   before insert on public.scores
   for each row execute function public.keep_best_score();
+
+-- ---------------------------------------------------------------------------
+-- Rate limit, per address.
+--
+-- The trigger above caps one name. It does nothing about a script that invents
+-- a new name every time, which is the flood that could actually fill this
+-- table. PostgREST hands the request's headers to Postgres, so the caller's
+-- address is readable here and can be counted.
+--
+-- Two things this is honest about.
+--
+-- It stores a HASH of the address, never the address. An IP is personal data,
+-- a leaderboard has no business keeping one, and a hash answers the only
+-- question being asked — "is this the same caller as a minute ago" — without
+-- keeping the answer to any other. Rows older than a day are deleted, because
+-- a rate limiter that remembers last week is a log nobody asked for.
+--
+-- And it is a speed bump, not a wall. X-Forwarded-For is what the edge reports;
+-- someone with a pool of proxies gets a fresh budget per address. The point is
+-- to make casual flooding cost more than it is worth, which it does, and not to
+-- pretend a static site can authenticate anybody.
+-- ---------------------------------------------------------------------------
+
+create table if not exists public.score_posts (
+  ip_hash   text        not null,
+  posted_at timestamptz not null default now()
+);
+
+create index if not exists score_posts_recent_idx
+  on public.score_posts (ip_hash, posted_at desc);
+
+-- No policies at all, and RLS on: with row-level security enabled, an operation
+-- without a policy is denied. The anon role therefore cannot read this table,
+-- cannot write to it, and cannot learn who has posted. Only the SECURITY
+-- DEFINER function below touches it.
+alter table public.score_posts enable row level security;
+
+create or replace function public.rate_limit_scores()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  -- 20 runs an hour. A single play takes a minute or two, so no human reaches
+  -- this; a loop reaches it in seconds.
+  max_per_hour constant integer := 20;
+  forwarded    text;
+  client_ip    text;
+  hashed       text;
+  recent       integer;
+begin
+  forwarded := current_setting('request.headers', true)::json ->> 'x-forwarded-for';
+
+  -- No header: local development, or a direct connection from the SQL editor.
+  -- Skipping beats refusing every insert because a proxy is not in the way.
+  if forwarded is null or forwarded = '' then
+    return new;
+  end if;
+
+  -- The header is a list; the left-most entry is the original client.
+  client_ip := btrim(split_part(forwarded, ',', 1));
+  hashed := md5(client_ip || '::fingertune-scores');
+
+  select count(*) into recent
+    from public.score_posts
+   where ip_hash = hashed
+     and posted_at > now() - interval '1 hour';
+
+  if recent >= max_per_hour then
+    raise exception 'Too many scores from this address. Try again later.'
+      using errcode = 'check_violation';
+  end if;
+
+  insert into public.score_posts (ip_hash) values (hashed);
+
+  -- Housekeeping on the way through, so nothing has to be scheduled. One
+  -- delete on an indexed column, against a table that stays small precisely
+  -- because of this line.
+  delete from public.score_posts where posted_at < now() - interval '1 day';
+
+  return new;
+end;
+$$;
+
+-- Runs before keep_best_score: there is no reason to look up an existing row
+-- for a caller that is about to be refused. Postgres fires BEFORE triggers in
+-- name order, and "a_" sorts ahead of "scores_".
+drop trigger if exists a_scores_rate_limit on public.scores;
+create trigger a_scores_rate_limit
+  before insert on public.scores
+  for each row execute function public.rate_limit_scores();

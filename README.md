@@ -491,6 +491,15 @@ bounds what a script in a loop can do to the table, and it fixes the bigger
 problem: without it, somebody who plays a chart twenty times holds the entire
 top twenty, and a board showing one person's afternoon is not a board.
 
+**Twenty posts an hour, per address.** A trigger reads the caller's address
+from the request headers, stores a *hash* of it — an IP is personal data and a
+leaderboard has no business keeping one — and refuses the insert past the
+budget. Rows older than a day are deleted on the way through, so nothing has to
+be scheduled. It is a speed bump rather than a wall: someone with a pool of
+proxies gets a fresh budget per address. The point is to make casual flooding
+cost more than it is worth, not to pretend a static site can authenticate
+anybody.
+
 **Scores are not verified and cannot be.** The game runs entirely in your
 browser, so any number it sends is a number somebody could have typed instead.
 Verifying would mean running the whole judging pipeline a second time, on a
