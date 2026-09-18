@@ -10,6 +10,7 @@ standalone/fingertune.html linguist-generated=true
 
 # Binaries, never touched.
 *.png binary
+*.gif binary
 *.jpg binary
 *.mp3 binary
 *.wav binary

@@ -5,7 +5,7 @@
 <h1 align="center">Fingertune</h1>
 
 <p align="center">
-  <a href="https://qthullie.github.io/fingertune/"><img src="https://img.shields.io/badge/▶%20PLAY%20IT%20NOW-in%20your%20browser-4dd8ff?style=for-the-badge&labelColor=07070d" alt="Play Fingertune in your browser" height="42"/></a>
+  <a href="https://qthullie.github.io/fingertune/"><img src="https://img.shields.io/badge/▶%20PLAY%20IT%20NOW-in%20your%20browser-4dd8ff?style=for-the-badge&labelColor=16162a" alt="Play Fingertune in your browser" height="42"/></a>
 </p>
 
 <p align="center">
@@ -14,10 +14,18 @@
 </p>
 
 <p align="center">
+  <img src="assets/demo.gif" alt="Two hands drawn as cyan and magenta skeletons on white, pinching targets in time with an approach ring; the combo counter climbs in the corner" width="760"/>
+</p>
+
+<p align="center">
+  <sub>Recorded in <b>privacy mode</b> (<kbd>V</kbd>): the webcam image is never drawn, only the tracked skeleton.</sub>
+</p>
+
+<p align="center">
   <a href="https://github.com/qthullie/fingertune/actions/workflows/ci.yml"><img src="https://github.com/qthullie/fingertune/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"/></a>
   <img src="https://img.shields.io/badge/MediaPipe-Hand%20Landmarker-ff6f00.svg" alt="MediaPipe Hand Landmarker"/>
-  <img src="https://img.shields.io/badge/inference-on--device-4dffb0.svg" alt="On-device inference"/>
+  <img src="https://img.shields.io/badge/inference-on--device-4dd8ff.svg" alt="On-device inference"/>
   <img src="https://img.shields.io/badge/typescript-strict-3178c6.svg" alt="TypeScript strict"/>
 </p>
 

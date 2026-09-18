@@ -219,14 +219,6 @@ export const assets = {
    * in .env.local to play over it. Then align your beatmap's `t` values to it.
    */
   musicUrl: import.meta.env.VITE_MUSIC_URL,
-  /**
-   * Public leaderboard endpoint (see server/leaderboard-worker.js).
-   *
-   * Empty by default, and that is a working configuration: with no URL the
-   * board reports itself as not configured and the game keeps its local high
-   * scores. Nothing here is required for the game to run.
-   */
-  leaderboardUrl: import.meta.env.VITE_LEADERBOARD_URL,
 } as const;
 
 /**
