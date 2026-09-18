@@ -210,14 +210,14 @@ const TEXT_X = 384;
 const lines = [
   { text: 'Fingertune', font: 'inter-800.ttf', size: 96, y: 206, color: INK },
   {
-    text: 'A rhythm game you play by pinching',
+    text: 'Pinch-controlled rhythm game',
     font: 'inter-400.ttf',
     size: 38,
     y: 332,
     color: INK,
   },
   {
-    text: 'Webcam only. Nothing is uploaded.',
+    text: 'Webcam hand tracking, judged to the millisecond.',
     font: 'inter-400.ttf',
     size: 27,
     y: 398,
