@@ -491,6 +491,14 @@ Verifying would mean running the whole judging pipeline a second time, on a
 server this project does not have. Rather than imply a rigour that is not there,
 the board says so on screen: it is a wall to sign, not a ranking.
 
+For the deployed site, `.env.local` is not enough — it only exists on your
+machine. Set the same two values as repository **variables** (Settings > Secrets
+and variables > Actions > Variables) named `SUPABASE_URL` and
+`SUPABASE_ANON_KEY`; the Pages workflow writes them into the build. Variables
+rather than secrets on purpose: the anon key ends up in the bundle either way,
+and labelling it a secret would teach the wrong lesson about where the boundary
+is.
+
 With no URL configured the component renders nothing at all. A missing backend is
 a working configuration here, not a degraded one.
 

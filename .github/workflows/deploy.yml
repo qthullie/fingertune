@@ -48,6 +48,23 @@ jobs:
       - run: npm run fetch:model
       - run: echo "VITE_HAND_MODEL_URL=./models/hand_landmarker.task" >> .env.production
 
+      # The online board, if one is configured. Repository VARIABLES, not
+      # secrets, and that is the honest labelling: the anon key ends up in the
+      # JavaScript bundle by design, so calling it a secret would teach the
+      # wrong lesson about where the boundary is. It is
+      # supabase/migrations/0001_scores.sql that constrains what the key can do.
+      #
+      # Undefined variables expand to empty strings, the game reports the board
+      # as not configured, and the site deploys exactly as it did before. A
+      # missing backend is a working configuration here.
+      #
+      # Settings > Secrets and variables > Actions > Variables:
+      #   SUPABASE_URL, SUPABASE_ANON_KEY
+      - name: Configure the online board
+        run: |
+          echo "VITE_SUPABASE_URL=${{ vars.SUPABASE_URL }}" >> .env.production
+          echo "VITE_SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}" >> .env.production
+
       - run: npm run build
 
       - uses: actions/configure-pages@v6
