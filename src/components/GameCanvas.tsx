@@ -147,6 +147,7 @@ export function GameCanvas({ engine, tracker, active }: Props): JSX.Element {
       engine,
       hands: tracker.hands,
       fps: fpsRef.current,
+      threaded: tracker.threaded,
     });
   }, active);
 

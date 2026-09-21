@@ -40,6 +40,8 @@ export interface RenderInput {
   engine: GameEngine;
   hands: readonly HandState[];
   fps: number;
+  /** True when inference runs in a worker. Shown in the debug overlay. */
+  threaded: boolean;
 }
 
 /**
@@ -567,7 +569,7 @@ function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
 
 /* ------------------------------------------------------------------ debug ---- */
 
-function drawDebug({ ctx, engine, hands, fps }: RenderInput): void {
+function drawDebug({ ctx, engine, hands, fps, threaded }: RenderInput): void {
   const u = unit();
   ctx.save();
   ctx.textAlign = 'left';
@@ -583,6 +585,7 @@ function drawDebug({ ctx, engine, hands, fps }: RenderInput): void {
     ),
     `thresholds on<${settings.PINCH_ON_RATIO} off>${settings.PINCH_OFF_RATIO}`,
     `phase ${engine.currentPhaseIndex + 1}  pixel scale ${settings.PIXEL_SCALE}`,
+    `inference ${threaded ? 'worker' : 'INLINE'}  predict ${(settings.PREDICT_AHEAD * 1000).toFixed(0)}ms`,
     `video ${settings.SHOW_VIDEO ? 'on' : 'PRIVACY'}  skeleton ${settings.SHOW_SKELETON ? 'on' : 'off'}`,
     `active targets ${engine.activeTargets().length}  effects ${engine.effects.items.length}`,
   ];

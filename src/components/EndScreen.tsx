@@ -5,6 +5,7 @@ import type { Beatmap, GameSnapshot } from '../game/types';
 import type { RecordResult } from '../lib/highscores';
 import { buildChallengeUrl, copyText } from '../lib/challenge';
 import { useT } from '../lib/i18n';
+import { Leaderboard } from './Leaderboard';
 
 interface Props {
   snapshot: GameSnapshot;
@@ -113,6 +114,15 @@ export function EndScreen({
           </p>
         )}
       </div>
+
+      <Leaderboard
+        beatmapId={beatmap.id}
+        run={{
+          score: snapshot.score,
+          accuracy: snapshot.accuracy,
+          maxCombo: snapshot.maxCombo,
+        }}
+      />
 
       <button type="button" onClick={onReplay}>
         {t('end.replay')}
