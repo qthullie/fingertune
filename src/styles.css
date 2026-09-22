@@ -1119,7 +1119,8 @@ button:disabled {
 /* -------------------------------------------------------------- leaderboard -- */
 
 /*
- * The online board, on the end screen.
+ * The online board, on the start screen for the selected map and on the end
+ * screen for the run just played.
  *
  * Tabular and quiet. It sits under a score the player has just earned, so it
  * must not compete with it: no fill, one rule, and the only pixel type is the
@@ -1139,6 +1140,10 @@ button:disabled {
     0 var(--px) 0 0 var(--rule),
     calc(-1 * var(--px)) 0 0 0 var(--rule),
     var(--px) 0 0 0 var(--rule);
+}
+
+.board--glance {
+  padding: calc(var(--px) * 3) calc(var(--px) * 4);
 }
 
 .board-title {
@@ -1182,6 +1187,21 @@ button:disabled {
 .board-row:nth-child(3) .board-rank {
   color: var(--ink);
   background: var(--cyan);
+}
+
+/* The player's own row. Weight and a shaded band, not a colour: the top three
+   already own the palette on this panel, and "you" is not a rank. */
+.board-row--mine {
+  background: var(--paper-shade);
+}
+
+.board-row--mine .board-name {
+  font-weight: 700;
+}
+
+.board-you {
+  font-weight: 400;
+  color: var(--ink-soft);
 }
 
 .board-rank {

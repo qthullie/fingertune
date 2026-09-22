@@ -465,14 +465,19 @@ named error instead of returning half a chart.
 ## Online board
 
 Optional, and absent unless configured. Local bests are invisible to everyone but
-the person who set them, so the end screen can also post a run to a shared board
-per chart.
+the person who set them, so each chart also has a shared board: the top five
+show on the start screen when a map is selected, and the end screen offers the
+run just played.
 
 ```bash
-# 1. create the table, in the Supabase SQL editor
+# 1. in the Supabase SQL editor, in order
 supabase/migrations/0001_scores.sql
+supabase/migrations/0002_players.sql
 
-# 2. .env.local
+# 2. in the dashboard: Authentication > Sign In / Providers
+#    > "Allow anonymous sign-ins"
+
+# 3. .env.local
 VITE_SUPABASE_URL=https://yourproject.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
@@ -485,11 +490,37 @@ There is deliberately no `update` and no `delete` policy: with row-level securit
 on, an operation without a policy is denied, and that omission is what stops
 anyone rewriting or erasing somebody else's run.
 
-**One row per name, per chart.** RLS can say who may insert; it cannot say how
-often, so a trigger folds every run by the same name into a single best. That
-bounds what a script in a loop can do to the table, and it fixes the bigger
-problem: without it, somebody who plays a chart twenty times holds the entire
-top twenty, and a board showing one person's afternoon is not a board.
+**A name belongs to someone.** Each player is a Supabase *anonymous* account:
+no email, no password, created on the first post and held by the browser as a
+signed token. Names are unique, case-insensitively, and belong to the account,
+so policies compare the row against `auth.uid()` — a value the server signed —
+rather than against a column the page filled in. Nobody can post under another
+player's name or touch their runs, and a rename follows every score already
+posted, because the board reads names through the foreign key. Reading a board
+never creates an account; only posting does. The cost, said plainly: the
+identity lives in one browser, and clearing site data loses it.
+
+Not an IP address, which was the other obvious candidate: one address is a whole
+office behind a NAT, a laptop changes address with the network, and an IP is
+personal data a leaderboard has no business keeping.
+
+**One row per player, per chart.** RLS can say who may insert; it cannot say
+how often, so a trigger folds every run by the same player into a single best.
+Without it, somebody who plays a chart twenty times holds the entire top twenty,
+and a board showing one person's afternoon is not a board.
+
+That trigger is also where the one subtle hole was. Postgres checks an insert
+policy against the row finally inserted, *after* `BEFORE` triggers — and this
+trigger cancels the insert and updates the existing row itself. For a player who
+already had a row, the policy was never consulted, and anyone could raise
+anybody's score. So the trigger checks ownership first, and the tests prove both
+halves: without that check, another player's score moves; with it, it does not.
+
+```bash
+# both migrations on a throwaway database, then 31 checks run as anon and
+# authenticated, the roles PostgREST uses
+PGHOST=localhost PGUSER=postgres sh supabase/tests/run.sh
+```
 
 **Twenty posts an hour, per address.** A trigger reads the caller's address
 from the request headers, stores a *hash* of it — an IP is personal data and a
@@ -562,7 +593,9 @@ src/
     stepmania.ts      .sm charts -> beatmaps
     chartImport.ts    sniffing, unzipping and audio hookup for a dropped file
     zip.ts            just enough ZIP to open an .osz, no dependency
-    leaderboard.ts    the optional online board (Supabase over plain fetch)
+    supabase.ts       config and the fetch wrapper, no SDK
+    player.ts         anonymous account and reserved name
+    leaderboard.ts    the optional online board: read a chart, post a run
     i18n.ts           the English and French catalogues, and the language store
     device.ts         is this a device the game can be played on at all
     preferences.ts    the settings a player chooses, kept across visits
@@ -575,7 +608,8 @@ src/
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
 supabase/
-  migrations/         the board's table, its constraints and its RLS policies
+  migrations/         the board's tables, constraints, RLS policies and triggers
+  tests/              those policies, checked on a stock Postgres
 scripts/
   make-og.mjs         draws public/og-card.png, the link-preview card
   fonts/              Inter, for the card only (OFL, see scripts/fonts)
