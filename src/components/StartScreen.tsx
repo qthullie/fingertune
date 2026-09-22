@@ -20,10 +20,6 @@ interface Props {
   loading: boolean;
   /** Local best score on the selected beatmap, or null. */
   best: BestScore | null;
-  /** The custom-music panel, rendered by the parent that owns the audio. */
-  music: JSX.Element;
-  /** The chart-import panel, rendered by the parent that owns the catalogue. */
-  chartImport: JSX.Element;
   /** False until this hand's pinch range has been measured. */
   calibrated: boolean;
   onRecalibrate: () => void;
@@ -66,8 +62,6 @@ export function StartScreen({
   status,
   loading,
   best,
-  music,
-  chartImport,
   calibrated,
   onRecalibrate,
   hideVideo,
@@ -193,9 +187,6 @@ export function StartScreen({
           ))}
         </li>
       </ul>
-
-      {chartImport}
-      {music}
 
       {hideVideo && <p className="small">{t('privacy.hint')}</p>}
 

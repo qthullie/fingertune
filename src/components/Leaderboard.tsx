@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   fetchBoard,
-  hasBoard,
+  isConfigured,
   submitScore,
   type BoardEntry,
   type BoardStatus,
@@ -29,10 +29,9 @@ const STATUS_KEY: Record<Exclude<BoardStatus, 'ok' | 'not-configured'>, MessageK
  * The online board: on the start screen for the selected map, and on the end
  * screen with the run offered for posting.
  *
- * It renders nothing at all when no board is configured, or for an imported
- * chart. The game shipped without one and still works without one, so an
- * empty panel saying "no leaderboard" would be a feature advertising its own
- * absence.
+ * It renders nothing at all when no board is configured. The game shipped
+ * without one and still works without one, so an empty panel saying "no
+ * leaderboard" would be a feature advertising its own absence.
  *
  * On the end screen it loads the board before anything is submitted, so the
  * run can be read against the field without joining it. Posting is a choice,
@@ -52,7 +51,7 @@ export function Leaderboard({ beatmapId, run, limit }: Props): JSX.Element | nul
   const me = playerId();
 
   useEffect(() => {
-    if (!hasBoard(beatmapId)) return;
+    if (!isConfigured()) return;
     let cancelled = false;
     setBusy(true);
     void fetchBoard(beatmapId, limit).then((page) => {
@@ -66,7 +65,7 @@ export function Leaderboard({ beatmapId, run, limit }: Props): JSX.Element | nul
     };
   }, [beatmapId, limit]);
 
-  if (!hasBoard(beatmapId)) return null;
+  if (!isConfigured()) return null;
 
   const clean = sanitizeNickname(name);
 
@@ -87,7 +86,7 @@ export function Leaderboard({ beatmapId, run, limit }: Props): JSX.Element | nul
       <h2 className="board-title">{t('board.title')}</h2>
 
       {status !== 'ok' && status !== 'not-configured' && (
-        <p className="small chart-error">{t(STATUS_KEY[status])}</p>
+        <p className="small note-error">{t(STATUS_KEY[status])}</p>
       )}
 
       {entries.length > 0 && (

@@ -54,15 +54,6 @@ export interface BoardPage {
   status: BoardStatus;
 }
 
-/**
- * Whether a chart has a board at all. Imported charts do not: each import gets
- * a fresh id, so its board could only ever hold one run. The table refuses them
- * too; this keeps the page from asking.
- */
-export function hasBoard(beatmapId: string): boolean {
-  return isConfigured() && !beatmapId.startsWith('import-');
-}
-
 function classify(err: unknown): BoardStatus {
   if (err instanceof DOMException && err.name === 'AbortError') return 'timeout';
   // 4xx is the server saying no — a malformed row, a policy refusing it, or
@@ -102,7 +93,7 @@ function parseRows(payload: unknown): BoardEntry[] {
 
 /** Top scores for a chart. Read as anon: looking never creates an account. Never throws. */
 export async function fetchBoard(beatmapId: string, limit = DEFAULT_LIMIT): Promise<BoardPage> {
-  if (!hasBoard(beatmapId)) return { entries: [], status: 'not-configured' };
+  if (!isConfigured()) return { entries: [], status: 'not-configured' };
   try {
     const query = new URLSearchParams({
       beatmap: `eq.${beatmapId}`,
@@ -134,7 +125,7 @@ export async function submitScore(
   run: RunScore,
   limit = DEFAULT_LIMIT,
 ): Promise<BoardPage> {
-  if (!hasBoard(beatmapId)) return { entries: [], status: 'not-configured' };
+  if (!isConfigured()) return { entries: [], status: 'not-configured' };
 
   try {
     if ((await claimName(name)) === 'taken') return { entries: [], status: 'taken' };

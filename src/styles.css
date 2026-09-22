@@ -28,8 +28,8 @@
  * can hit it.
  */
 
-/* Self-hosted so the game keeps working offline, in the single-file standalone
-   build, and on a conference wifi that blocks Google.
+/* Self-hosted so the game keeps working offline and on a conference wifi that
+   blocks Google.
 
    In src/, not public/: the base URL is relative (see vite.config.ts) so the
    site works from /<repo>/ on GitHub Pages as well as from a plain folder, and
@@ -999,123 +999,6 @@ button:disabled {
   background: var(--ink);
 }
 
-/* ------------------------------------------------------------ custom music -- */
-
-/* Collapsed by default. Most players want the generated track and should not
-   have to scroll past a file picker to reach the Play button. */
-.music {
-  width: min(480px, 88vw);
-  margin: var(--px);
-  text-align: left;
-  background: var(--paper);
-  box-shadow:
-    0 calc(-1 * var(--px)) 0 0 var(--rule),
-    0 var(--px) 0 0 var(--rule),
-    calc(-1 * var(--px)) 0 0 0 var(--rule),
-    var(--px) 0 0 0 var(--rule);
-}
-
-.music[open] {
-  box-shadow:
-    0 calc(-1 * var(--px)) 0 0 var(--ink),
-    0 var(--px) 0 0 var(--ink),
-    calc(-1 * var(--px)) 0 0 0 var(--ink),
-    var(--px) 0 0 0 var(--ink);
-}
-
-.music > summary {
-  padding: calc(var(--px) * 3) calc(var(--px) * 4);
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  color: var(--ink-soft);
-  cursor: pointer;
-  list-style: none;
-}
-
-.music > summary:hover,
-.music[open] > summary {
-  color: var(--ink);
-}
-
-.music > summary::-webkit-details-marker {
-  display: none;
-}
-
-.music > summary::before {
-  content: '+ ';
-}
-
-.music[open] > summary::before {
-  content: '- ';
-}
-
-.music-body {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--px) * 3);
-  padding: 0 calc(var(--px) * 4) calc(var(--px) * 4);
-}
-
-/* The native file input is unstyleable and says "No file chosen" in whatever
-   language the browser feels like; the label carries the real state instead. */
-.music-file input {
-  display: none;
-}
-
-.music-file span {
-  display: block;
-  padding: calc(var(--px) * 2) calc(var(--px) * 3);
-  font-size: 12px;
-  color: var(--ink-soft);
-  background: var(--paper-shade);
-  cursor: pointer;
-  box-shadow:
-    0 -2px 0 0 var(--rule),
-    0 2px 0 0 var(--rule),
-    -2px 0 0 0 var(--rule),
-    2px 0 0 0 var(--rule);
-}
-
-.music-file span:hover {
-  color: var(--ink);
-  box-shadow:
-    0 -2px 0 0 var(--ink),
-    0 2px 0 0 var(--ink),
-    -2px 0 0 0 var(--ink),
-    2px 0 0 0 var(--ink);
-}
-
-.music-bpm {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: calc(var(--px) * 2);
-  font-size: 12px;
-  color: var(--ink-soft);
-}
-
-.music-bpm input {
-  width: 84px;
-  margin-left: var(--px);
-  padding: calc(var(--px) * 1.5) calc(var(--px) * 2);
-  font-family: var(--font-pixel);
-  font-size: 11px;
-  color: var(--ink);
-  background: var(--paper);
-  border: 0;
-  border-radius: 0;
-  box-shadow:
-    0 -2px 0 0 var(--ink),
-    0 2px 0 0 var(--ink),
-    -2px 0 0 0 var(--ink),
-    2px 0 0 0 var(--ink);
-}
-
-.music-bpm input:focus {
-  outline: 2px solid var(--cyan);
-  outline-offset: 2px;
-}
-
 /* -------------------------------------------------------------- leaderboard -- */
 
 /*
@@ -1267,9 +1150,9 @@ button:disabled {
   outline-offset: 2px;
 }
 
-/* An import that failed says why, in the words the parser used: "the archive
-   contains no chart" is actionable, "import failed" is not. */
-.chart-error {
+/* A failure, said in a sentence. The red is a rule beside the words, not the
+   words themselves: colour is never the only thing carrying the message. */
+.note-error {
   color: var(--ink);
   border-left: var(--px) solid var(--red);
   padding-left: calc(var(--px) * 2);

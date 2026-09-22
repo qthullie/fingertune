@@ -37,11 +37,12 @@
 **Real-time hand-gesture recognition in the browser**, turned into a playable
 instrument. A webcam feeds **MediaPipe Hand Landmarker**; the pipeline smooths
 the landmarks, decides when thumb and index are *pinched*, and timestamps that
-event precisely enough to judge it against a musical beat. One hand, one gesture,
-judged in tens of milliseconds.
+event precisely enough to judge it against a musical beat. One gesture, up to two
+hands, judged in tens of milliseconds.
 
 Everything runs **on-device**: inference is WebAssembly + GPU delegate inside the
-tab. No frame, no landmark, no score ever leaves the machine.
+tab. No frame and no landmark ever leaves the machine; a score does only when the
+player chooses to post it to the [online board](#online-board).
 
 > ### This pipeline is not a demo. It ships.
 >
@@ -66,7 +67,6 @@ tab. No frame, no landmark, no score ever leaves the machine.
   - [Tuning and diagnosis](#tuning-and-diagnosis)
 - [Beyond the game: pinch as a pointing device](#beyond-the-game-pinch-as-a-pointing-device)
 - [The game around it](#the-game-around-it)
-- [Bring your own charts](#bring-your-own-charts)
 - [Online board](#online-board)
 - [Quick start](#quick-start)
 - [Project layout](#project-layout)
@@ -94,7 +94,7 @@ pinch ratio  =  ‖thumb₄ − index₈‖ / ‖wrist₀ − middleMCP₉‖
       │  scale-invariant: same threshold near or far from the camera
       ▼
 hysteresis state machine + cooldown         lib/handTracking.ts
-      │  ratio < 0.42 ⇒ PINCHED, ratio > 0.62 ⇒ RELEASED, ≥140 ms between triggers
+      │  ratio < 0.45 ⇒ PINCHED, ratio > 0.65 ⇒ RELEASED, ≥140 ms between triggers
       ▼
 rising edge "justPinched" + cursor (thumb–index midpoint)
       │
@@ -105,8 +105,8 @@ judged against the audio clock: |now − t| ⇒ PERFECT / GOOD / MISS
 ### 1. Landmarks
 
 MediaPipe Hand Landmarker in `VIDEO` running mode, `float16` model, GPU
-delegate, `numHands: 1`. Detection is driven from the render loop but skipped
-whenever `video.currentTime` has not advanced — the webcam produces ~30 fps while
+delegate, `numHands: MAX_HANDS` (2). The render loop hands each frame to the
+model, but skips any frame whose `video.currentTime` has not advanced — the webcam produces ~30 fps while
 the loop runs at 60, and inferring twice on the same frame is pure waste.
 
 Only four of the 21 landmarks drive the *decision* — thumb tip (4), index tip
@@ -178,8 +178,8 @@ gesture is still visible.
 The pipeline loops over N hands and assigns each detection to a fixed slot from
 its **handedness** label rather than its position in the result array — MediaPipe
 can swap that order between frames, which would hand one hand's filter state to
-the other. `MAX_HANDS` is 1 by default; raising it to 2 works, but the demo chart
-is written for one hand.
+the other. `MAX_HANDS` is 2: *Duet* needs both hands, every other chart is
+played with one.
 
 ### 4. Coordinate spaces
 
@@ -352,13 +352,22 @@ The soundtrack is synthesised by Tone.js on the same transport and grows with
 each phase; misses are audible; the best score per beatmap is kept in
 `localStorage`.
 
-**Three beatmaps**, each built around removing something. *Demo* teaches both
+**Four beatmaps**, each built around one idea. *Demo* (120 BPM) teaches both
 note kinds at a pace that forgives everything. *Pulse* (140 BPM) has no sliders
 at all, so nothing asks you to hold a pinch and the notes sit far closer
 together — a map about timing and nothing else. *Drift* (100 BPM) is almost all
 sliders, which is a test of holding a pinch steady while the whole hand travels,
-and that is where the One-Euro filter is least certain. Neither is harder than
-the other; they fail for different reasons.
+and that is where the One-Euro filter is least certain. Pulse and Drift are not
+harder than each other; they fail for different reasons.
+
+*Duet* (110 BPM) is played with **both hands**, and nothing in the engine checks
+which hand hit what. The map is split down the middle — left-hand notes never
+leave the left third, right-hand notes the right third — so what makes it
+two-handed is simply that one hand cannot be in both places at once. Enforcing
+the hand in code would be worse than useless: MediaPipe reports handedness from
+a mirrored image and gets it wrong often enough that a correct hit would
+sometimes be judged a miss. Its three phases are three kinds of coordination:
+mirror, alternate, and one hand holding a slider while the other taps.
 
 **A run can start at any phase.** Everything before it is dropped and the rest
 slides back to zero, so starting at the last phase is a real run at that
@@ -382,12 +391,6 @@ link of the form `#c=<map>.<score>`, which opens the game on that map with that
 score to beat and shows it in the HUD with a live signed delta. A fragment, so
 it never reaches a server; not tamper-proof, and not meant to be — anyone who
 edits it has beaten themselves at a game nobody was refereeing.
-
-**You can play over your own track.** A local file, through
-`URL.createObjectURL`, so the audio never leaves the machine, with tap tempo to
-match the BPM. The beatmap keeps its own grid and nothing detects the first
-downbeat, so a track that does not start on one will sit at a constant offset —
-this is a tool for getting close, not a sync.
 
 **Privacy mode hides the webcam image** (<kbd>V</kbd>), and it is the symmetric
 of the skeleton toggle that was already there: `SHOW_SKELETON` draws the hand on
@@ -420,47 +423,12 @@ Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
 `duration` for sliders) and phase definitions — in
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
 and `slider()` helpers. Add yours and register it in
-[`src/beatmaps/index.ts`](src/beatmaps/index.ts). To play on your own music, drop
-a file in `public/music/` and set `VITE_MUSIC_URL`.
+[`src/beatmaps/index.ts`](src/beatmaps/index.ts); `npm run build` checks every
+chart before it ships ([`scripts/check-beatmaps.mjs`](scripts/check-beatmaps.mjs)).
 
 Shortcuts: <kbd>Space</kbd> pause · <kbd>R</kbd> replay · <kbd>V</kbd> privacy
 mode · <kbd>S</kbd> skeleton · <kbd>M</kbd> metronome · <kbd>P</kbd> pinch gauge ·
 <kbd>F</kbd> playfield · <kbd>D</kbd> debug.
-
-## Bring your own charts
-
-Authoring a beatmap costs an evening per minute of music, so a game that ships
-four of them has four forever. osu! and StepMania between them have a public
-library of hundreds of thousands, in plain-text formats that have barely moved
-in a decade and that ask for close enough to the same thing: hit this, on this
-beat, then drag along that.
-
-Drop an **`.osz`**, **`.osu`**, **`.sm`** or **`.zip`** on the start screen. An
-archive is read in the tab — chart *and* audio — which is what makes it one drag
-instead of three: the chart names its track, and nothing else can find that file.
-Nothing is uploaded, same as the rest of the game.
-
-It is a conversion, not an emulation, and the parsers are explicit wherever they
-make a decision the mapper did not:
-
-| | osu! ([`osu.ts`](src/lib/osu.ts)) | StepMania ([`stepmania.ts`](src/lib/stepmania.ts)) |
-| --- | --- | --- |
-| Notes | circles map exactly | taps map exactly |
-| Paths | sliders walked as polylines through their control points: straight ones exact, curves cut the corner | holds become short downward drags |
-| Difficulty | AR, OD and CS through osu!'s own published formulas | fixed, since a stepchart has no equivalent |
-| Dropped | spinners | mines, rolls, lifts |
-| Invented | nothing | the vertical axis: lanes become columns, height is a slow wave |
-
-Two caveats worth knowing before blaming the importer. osu! is played with a
-tablet and this is played with a hand in the air, so a chart that is comfortable
-there is usually a tier harder here. And a `.osz` holds every difficulty at once:
-the import takes the first by name and tells you which, so unzip and pick another
-if it took the wrong one.
-
-The zip reader ([`zip.ts`](src/lib/zip.ts)) is ~150 lines rather than a
-dependency — the browser already ships the inflater, and what was left was a
-directory walk. Zip64, encryption and unknown compression methods each throw a
-named error instead of returning half a chart.
 
 ## Online board
 
@@ -483,9 +451,10 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
 ```
 
 **The security boundary is the SQL, not the key.** The anon key ships inside the
-JavaScript bundle — that is what "anon" means — so the migration is written
+JavaScript bundle — that is what "anon" means — so the migrations are written
 assuming an attacker already has it, because everyone does. Reads are public.
-Inserts are allowed and constrained by table checks that refuse impossible rows.
+Inserts need a player's signed token (below) and pass table checks that refuse
+impossible rows.
 There is deliberately no `update` and no `delete` policy: with row-level security
 on, an operation without a policy is denied, and that omission is what stops
 anyone rewriting or erasing somebody else's run.
@@ -570,8 +539,7 @@ screen). The model (~7 MB) downloads on first launch, then stays cached.
 > over `file://` is blocked by most browsers.
 
 ```bash
-npm run build             # typecheck + static build into dist/
-npm run build:standalone  # one self-contained HTML into standalone/fingertune.html
+npm run build   # typecheck, chart checks, static build into dist/
 ```
 
 `dist/` uses a relative base, so it works as-is on GitHub Pages (see
@@ -586,13 +554,11 @@ src/
     handTracking.ts   MediaPipe, landmark smoothing, pinch state machine, hand slots
     oneEuro.ts        One-Euro filter
     audio.ts          Tone.js: reference clock, generated soundtrack, hit/miss sounds
-    highscores.ts     localStorage best scores
-    errors.ts         technical errors → message keys
     handWorker.ts     MediaPipe in a Web Worker, off the render thread
-    osu.ts            .osu charts -> beatmaps
-    stepmania.ts      .sm charts -> beatmaps
-    chartImport.ts    sniffing, unzipping and audio hookup for a dropped file
-    zip.ts            just enough ZIP to open an .osz, no dependency
+    calibration.ts    measuring a player's pinch range, and keeping it
+    highscores.ts     localStorage best scores
+    challenge.ts      the #c=<map>.<score> link a finished run shares
+    errors.ts         technical errors → message keys
     supabase.ts       config and the fetch wrapper, no SDK
     player.ts         anonymous account and reserved name
     leaderboard.ts    the optional online board: read a chart, post a run
@@ -603,7 +569,8 @@ src/
   game/               engine (timing windows, score, phases), slider geometry,
                       effects, types
   render/             view + playfield transforms, renderer (video, targets, skeleton)
-  components/         GameCanvas (loop), Hud, Start/Error/End/Mobile screens
+  components/         GameCanvas (loop), Hud, Leaderboard, and the Start,
+                      Calibration, Pause, End, Error and Mobile screens
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
@@ -611,6 +578,9 @@ supabase/
   migrations/         the board's tables, constraints, RLS policies and triggers
   tests/              those policies, checked on a stock Postgres
 scripts/
+  copy-assets.mjs     MediaPipe wasm and the favicon into public/ (predev, prebuild)
+  check-beatmaps.mjs  every chart validated before a build ships it
+  fetch-model.mjs     the hand model, for running fully offline
   make-og.mjs         draws public/og-card.png, the link-preview card
   fonts/              Inter, for the card only (OFL, see scripts/fonts)
 ```

@@ -9,8 +9,6 @@
  * per phase: phase 1 minimal, phase 2 drums and bass, phase 3 the full thing
  * with a lead. It starts on the same audio instant as the targets, so beatmap
  * notes fall on the musical grid, like Osu!.
- *
- * To play over your own music: set VITE_MUSIC_URL (see settings.ts).
  */
 
 import * as Tone from 'tone';
@@ -45,7 +43,6 @@ export class AudioEngine {
   private pad: Tone.PolySynth<Tone.Synth> | null = null;
   private musicPart: Tone.Loop | null = null;
   private metroLoop: Tone.Loop | null = null;
-  private player: Tone.Player | null = null;
 
   /** Current phase (0..2): drives the arrangement. */
   private intensity = 0;
@@ -183,7 +180,6 @@ export class AudioEngine {
       const step = this.step % 8;
       const bar = Math.floor(this.step / 8) % 2;
       this.step += 1;
-      if (this.player) return; // custom track: no generated layer on top
 
       // Pad: every 2 bars, present from phase 1.
       if (step === 0) {
@@ -223,28 +219,6 @@ export class AudioEngine {
   }
 
   /**
-   * Loads a custom music track (VITE_MUSIC_URL). If the URL is missing or the
-   * file cannot be fetched, the generated track is used instead.
-   */
-  async loadTrack(url: string | undefined): Promise<void> {
-    // Replacing a track: the previous Player keeps its buffer and its output
-    // connection until disposed, so skipping this leaves both playing at once.
-    this.player?.stop();
-    this.player?.dispose();
-    this.player = null;
-    if (!url) return;
-    try {
-      const player = new Tone.Player({ url, loop: false }).toDestination();
-      await Tone.loaded();
-      player.volume.value = settings.MUSIC_VOLUME;
-      this.player = player;
-    } catch (err) {
-      console.warn('[fingertune] custom track not found, using the generated one:', err);
-      this.player = null;
-    }
-  }
-
-  /**
    * Starts the music and returns the exact audio instant of the run's t=0, so
    * the engine can line its targets up with it.
    *
@@ -266,12 +240,7 @@ export class AudioEngine {
     this.metroLoop?.start(0);
 
     // The music comes in when the countdown ends; the countdown gets a count-in.
-    if (this.player) {
-      this.player.stop();
-      this.player.start(startAt + settings.COUNTDOWN);
-    } else {
-      Tone.Transport.start(startAt + settings.COUNTDOWN);
-    }
+    Tone.Transport.start(startAt + settings.COUNTDOWN);
 
     for (let i = 0; i < Math.floor(settings.COUNTDOWN); i++) {
       this.metroSynth?.triggerAttackRelease('C3', '32n', startAt + i);
@@ -282,34 +251,19 @@ export class AudioEngine {
 
   stopMusic(): void {
     Tone.Transport.stop();
-    this.player?.stop();
   }
 
   /**
-   * Holds the music where it is.
-   *
-   * `Tone.Transport.pause()` keeps its position, so the generated track resumes
-   * mid-bar rather than restarting the arrangement. A `Player` has no pause, so
-   * it is stopped and restarted from an offset -- see `resumeMusic`.
+   * Holds the music where it is. `Tone.Transport.pause()` keeps its position,
+   * so the track resumes mid-bar rather than restarting the arrangement.
    */
   pauseMusic(): void {
     Tone.Transport.pause();
-    this.player?.stop();
   }
 
-  /**
-   * Picks the music back up in step with the run.
-   *
-   * @param atTime game time the engine is resuming at, countdown included.
-   *               The music starts at the end of the countdown, so the offset
-   *               into the track is that much less.
-   */
-  resumeMusic(atTime: number): void {
+  /** Picks the music back up from where it was paused. */
+  resumeMusic(): void {
     Tone.Transport.start();
-    if (this.player) {
-      const offset = Math.max(0, atTime - settings.COUNTDOWN);
-      this.player.start(undefined, offset);
-    }
   }
 
   /** Steps the arrangement up (called on a phase change). */
@@ -360,7 +314,6 @@ export class AudioEngine {
       this.bass,
       this.lead,
       this.pad,
-      this.player,
     ]) {
       node?.dispose();
     }

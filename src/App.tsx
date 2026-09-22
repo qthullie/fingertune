@@ -17,11 +17,9 @@ import { loadBest, submitScore, type BestScore, type RecordResult } from './lib/
 import { beatmaps, defaultBeatmap, findBeatmap } from './beatmaps';
 import { parseChallenge } from './lib/challenge';
 import { CalibrationScreen } from './components/CalibrationScreen';
-import { MusicPicker } from './components/MusicPicker';
-import { ChartImport } from './components/ChartImport';
 import { clearCalibration, loadCalibration } from './lib/calibration';
 import type { Beatmap } from './game/types';
-import { assets, settings } from './config/settings';
+import { settings } from './config/settings';
 
 /**
  * Single instances, kept outside React's lifecycle.
@@ -86,19 +84,6 @@ export function App(): JSX.Element {
   beatmapRef.current = beatmap;
   const phaseRef = useRef(startPhase);
   phaseRef.current = startPhase;
-  /* Custom track chosen at runtime. `assets.musicUrl` stays the build-time
-     default; this overrides it for the session only. */
-  const [track, setTrack] = useState<{ url: string; name: string } | null>(null);
-  const [bpm, setBpm] = useState(defaultBeatmap.bpm);
-  const trackRef = useRef(track);
-  trackRef.current = track;
-  const bpmRef = useRef(bpm);
-  bpmRef.current = bpm;
-  /* Charts the player brought with them, newest first. They live beside the
-     built-in ones rather than replacing them: someone who imports a map still
-     wants Demo there to warm up on. */
-  const [imported, setImported] = useState<Beatmap[]>([]);
-  const catalogue = imported.length > 0 ? [...imported, ...beatmaps] : beatmaps;
 
   const [calibrate, setCalibrate] = useState(storedCalibration === null);
   const calibrateRef = useRef(calibrate);
@@ -127,7 +112,7 @@ export function App(): JSX.Element {
         // The soundtrack steps up on every phase.
         onPhaseChange: (index) => audio.setIntensity(index),
         onPause: () => audio.pauseMusic(),
-        onResume: (at) => audio.resumeMusic(at),
+        onResume: () => audio.resumeMusic(),
         onFinish: () => {
           const final = engine.getSnapshot();
           const result = submitScore(beatmapRef.current.id, {
@@ -145,8 +130,7 @@ export function App(): JSX.Element {
     setRecord(null);
     tracker.resetHands();
     const map = beatmapRef.current;
-    // A custom track carries its own tempo; otherwise the map's is authoritative.
-    audio.setBpm(trackRef.current ? bpmRef.current : map.bpm);
+    audio.setBpm(map.bpm);
     // The music defines t=0, so notes land on the musical grid.
     const startAt = audio.startMusic();
     engine.start(map, startAt, phaseRef.current);
@@ -162,7 +146,6 @@ export function App(): JSX.Element {
       // Immediate blip: if you cannot hear it, the problem is the audio output
       // (muted tab, system volume), not the game.
       audio.playTestBlip();
-      await audio.loadTrack(trackRef.current?.url ?? assets.musicUrl);
       await tracker.loadModel((step) => setStatus(STEP_KEYS[step]));
       await tracker.startCamera((step) => setStatus(STEP_KEYS[step]));
       setStatus('status.ready');
@@ -258,52 +241,15 @@ export function App(): JSX.Element {
 
       {uiPhase === 'start' && (
         <StartScreen
-          beatmaps={catalogue}
+          beatmaps={beatmaps}
           selected={beatmap}
           onSelect={(next) => {
             setBeatmap(next);
             setStartPhase(0);
             setBest(loadBest(next.id));
-            if (!track) setBpm(next.bpm);
           }}
           startPhase={startPhase}
           onSelectPhase={setStartPhase}
-          chartImport={
-            <ChartImport
-              onImport={(chart, audioUrl, label) => {
-                setImported((previous) => [chart, ...previous.filter((m) => m.id !== chart.id)]);
-                setBeatmap(chart);
-                setStartPhase(0);
-                setBest(loadBest(chart.id));
-                // A chart that came with its own audio selects it too: the
-                // whole point of dropping one archive is not then having to
-                // find the track inside it by hand.
-                if (audioUrl) {
-                  setTrack({ url: audioUrl, name: label });
-                  setBpm(chart.bpm);
-                  void audio.loadTrack(audioUrl);
-                } else {
-                  setBpm(chart.bpm);
-                }
-              }}
-            />
-          }
-          music={
-            <MusicPicker
-              trackName={track?.name ?? null}
-              onPick={(url, name) => {
-                setTrack({ url, name });
-                void audio.loadTrack(url);
-              }}
-              onClear={() => {
-                setTrack(null);
-                setBpm(beatmap.bpm);
-                void audio.loadTrack(undefined);
-              }}
-              bpm={bpm}
-              onBpm={setBpm}
-            />
-          }
           hideVideo={hideVideo}
           onHideVideo={setHideVideo}
           calibrated={!calibrate}

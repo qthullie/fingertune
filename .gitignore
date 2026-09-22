@@ -1,17 +1,15 @@
 node_modules/
 dist/
 dist-ssr/
-# Intermediate output of the single-file build; the committed result is
-# standalone/fingertune.html
-dist-standalone/
 *.local
 .env
 .env.local
 .env.*.local
 
-# Assets generes / telecharges (voir scripts/)
+# Generated or downloaded by scripts/copy-assets.mjs and scripts/fetch-model.mjs
 public/mediapipe/
 public/models/
+public/favicon.svg
 
 # Staging directory for scripts/make-og.mjs, removed on its way out.
 .og-build/
@@ -23,7 +21,7 @@ pnpm-debug.log*
 .vite/
 .eslintcache
 
-# Editeurs / OS
+# Editors / OS
 .vscode/*
 !.vscode/extensions.json
 .idea/

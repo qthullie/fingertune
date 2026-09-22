@@ -139,27 +139,6 @@ const en = {
   'hud.target.challenge': 'Challenge',
   'hud.privacy': 'Privacy mode — webcam hidden',
 
-  /* -- bring your own chart -- */
-  'chart.summary': 'Import a beatmap (osu! or StepMania)',
-  'chart.choose': 'Choose an .osz, .osu, .sm or .zip',
-  'chart.loading': 'Reading the chart…',
-  'chart.loaded': 'Loaded {label} — {notes} notes. Pick it in the list above.',
-  'chart.noAudio':
-    'No audio in the file: the chart asks for {file}. Add it with the music panel below.',
-  'chart.failed': 'Could not read that file.',
-  'chart.caveat':
-    'Converted, not emulated: osu! spinners are dropped and curved sliders are walked as straight segments; StepMania lanes become columns and the height is added by the importer. Nothing is uploaded — the archive is read in this tab.',
-
-  /* -- music picker -- */
-  'music.summary': 'Play over your own music',
-  'music.choose': 'Choose an audio file',
-  'music.back': 'Back to the generated track',
-  'music.tap': 'Tap tempo',
-  'music.bpm': 'BPM',
-  'music.keepTapping': 'Keep tapping…',
-  'music.caveat':
-    'The notes keep the beatmap’s own grid. Matching the BPM lines the spacing up with your track, but the first downbeat is not detected — if the track does not start on one, everything will sit at a constant offset. Your file never leaves this machine.',
-
   /* -- online board -- */
   'board.title': 'Online board',
   'board.name': 'Your name',
@@ -343,24 +322,7 @@ const fr: Record<MessageKey, string> = {
   'hud.target.challenge': 'Défi',
   'hud.privacy': 'Mode confidentialité — webcam masquée',
 
-  'chart.summary': 'Importer une beatmap (osu! ou StepMania)',
-  'chart.choose': 'Choisir un .osz, .osu, .sm ou .zip',
-  'chart.loading': 'Lecture de la carte…',
-  'chart.loaded': '{label} chargé — {notes} notes. Sélectionnez-la dans la liste ci-dessus.',
-  'chart.noAudio':
-    'Pas d’audio dans le fichier : la carte demande {file}. Ajoutez-le avec le panneau musique ci-dessous.',
-  'chart.failed': 'Impossible de lire ce fichier.',
-  'chart.caveat':
-    'Converti, pas émulé : les spinners osu! sont ignorés et les sliders courbes sont parcourus en segments droits ; les colonnes StepMania deviennent des colonnes à l’écran et la hauteur est ajoutée par l’import. Rien n’est envoyé — l’archive est lue dans cet onglet.',
 
-  'music.summary': 'Jouer sur votre propre musique',
-  'music.choose': 'Choisir un fichier audio',
-  'music.back': 'Revenir à la piste générée',
-  'music.tap': 'Taper le tempo',
-  'music.bpm': 'BPM',
-  'music.keepTapping': 'Continuez à taper…',
-  'music.caveat':
-    'Les notes gardent la grille de la beatmap. Régler le BPM aligne l’espacement sur votre piste, mais le premier temps n’est pas détecté — si la piste ne commence pas dessus, tout sera décalé d’une valeur constante. Votre fichier ne quitte jamais cette machine.',
 
   'board.title': 'Classement en ligne',
   'board.name': 'Votre nom',
