@@ -4,6 +4,7 @@ import type { BestScore } from '../lib/highscores';
 import { loadBest } from '../lib/highscores';
 import { useT, type MessageKey } from '../lib/i18n';
 import { LangSwitch } from './LangSwitch';
+import { Leaderboard } from './Leaderboard';
 import { PrivacySwitch } from './PrivacySwitch';
 import { Rich } from './Rich';
 
@@ -31,6 +32,9 @@ interface Props {
   onHideVideo: (hidden: boolean) => void;
   onStart: () => void;
 }
+
+/** Board rows on this screen: enough to see the field, short enough to keep the play button in reach. */
+const GLANCE_ROWS = 5;
 
 /** The keyboard line, as pairs of key and what it does. */
 const SHORTCUTS: ReadonlyArray<readonly [string, MessageKey]> = [
@@ -160,6 +164,11 @@ export function StartScreen({
           </span>
         </div>
       )}
+
+      {/* The field for the selected map, before playing it: knowing what the
+          top of the board looks like is a reason to pick one map over another,
+          and it is the first thing a visitor from a shared link wants to see. */}
+      <Leaderboard beatmapId={selected.id} limit={GLANCE_ROWS} />
 
       <ul className="tips">
         {(

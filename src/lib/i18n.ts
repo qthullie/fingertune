@@ -162,11 +162,15 @@ const en = {
 
   /* -- online board -- */
   'board.title': 'Online board',
-  'board.name': 'Name',
+  'board.name': 'Your name',
   'board.placeholder': 'anon',
   'board.submit': 'Post my score',
   'board.sending': 'Sending…',
-  'board.submitted': 'Posted. Refresh to see the board move.',
+  'board.submitted': 'Posted. The board keeps your best run on this chart.',
+  'board.taken': 'That name belongs to another player. Pick another.',
+  'board.you': '(you)',
+  'board.identity':
+    'Your name is reserved for you, in this browser. Changing it renames all your scores.',
   'board.empty': 'Nobody has posted a score on this chart yet. Be first.',
   'board.offline': 'The board is unreachable. Your local best is still saved.',
   'board.timeout': 'The board did not answer in time. Your local best is still saved.',
@@ -359,11 +363,15 @@ const fr: Record<MessageKey, string> = {
     'Les notes gardent la grille de la beatmap. Régler le BPM aligne l’espacement sur votre piste, mais le premier temps n’est pas détecté — si la piste ne commence pas dessus, tout sera décalé d’une valeur constante. Votre fichier ne quitte jamais cette machine.',
 
   'board.title': 'Classement en ligne',
-  'board.name': 'Nom',
+  'board.name': 'Votre nom',
   'board.placeholder': 'anon',
   'board.submit': 'Publier mon score',
   'board.sending': 'Envoi…',
-  'board.submitted': 'Publié. Rechargez pour voir le classement bouger.',
+  'board.submitted': 'Publié. Le classement garde votre meilleure partie sur cette carte.',
+  'board.taken': 'Ce nom appartient à un autre joueur. Choisissez-en un autre.',
+  'board.you': '(vous)',
+  'board.identity':
+    'Votre nom vous est réservé, dans ce navigateur. Le changer renomme tous vos scores.',
   'board.empty': 'Personne n’a encore publié de score sur cette carte. À vous.',
   'board.offline': 'Classement injoignable. Votre record local reste enregistré.',
   'board.timeout': 'Le classement n’a pas répondu à temps. Votre record local reste enregistré.',
