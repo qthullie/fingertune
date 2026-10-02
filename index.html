@@ -23,8 +23,8 @@
       og:image has to be an absolute URL — a crawler resolves it against
       nothing — and it has to be a raster: LinkedIn will not render an SVG. The
       1200x630 PNG is drawn by `npm run build:og`: the sprite comes straight out
-      of assets/logo.svg, the type is set in Inter. The filename is versioned on
-      purpose — LinkedIn caches a preview image by URL, so replacing the bytes
+      of assets/logo.svg, the type is set in Inter. A redrawn card needs a new
+      filename — LinkedIn caches a preview image by URL, so replacing the bytes
       behind an address it has already fetched changes nothing.
     -->
     <meta property="og:type" content="website" />
@@ -41,7 +41,7 @@
     <meta property="og:image:height" content="630" />
     <meta
       property="og:image:alt"
-      content="The Fingertune sprite — a pixel-art approach ring closing on a target — beside the name and the line: a rhythm game you play by pinching."
+      content="The Fingertune sprite — a pixel-art approach ring closing on a target — beside the name and the line: Pinch-controlled rhythm game."
     />
     <meta property="og:locale" content="en_GB" />
     <meta property="og:locale:alternate" content="fr_FR" />

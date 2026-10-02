@@ -328,7 +328,7 @@ absorb. Pass here and the browser UI is easy.
 
 Short version, because the pipeline above is the point.
 
-It is an Osu!-style rhythm game with two note types:
+It is an osu!-style rhythm game with two note types:
 
 - **circles** — pinch once, as the approach ring closes on the target;
 - **sliders** — pinch the head, then *keep pinching* and drag along the track,
@@ -336,7 +336,7 @@ It is an Osu!-style rhythm game with two note types:
   follow. Letting go mid-way is a slider break: it costs the combo, and you can
   grab it again, but the body is graded on the fraction you actually followed
   (`SLIDER_PERFECT_RATIO` 0.85, `SLIDER_GOOD_RATIO` 0.5). One slider therefore
-  produces two judgements, head and body, like Osu!.
+  produces two judgements, head and body, like osu!.
 
 Hits are graded **Perfect**, **Good** or **Miss**, with a combo and weighted
 accuracy. The demo chart runs in three difficulty phases, and each one scales the
@@ -392,7 +392,7 @@ score to beat and shows it in the HUD with a live signed delta. A fragment, so
 it never reaches a server; not tamper-proof, and not meant to be — anyone who
 edits it has beaten themselves at a game nobody was refereeing.
 
-**Privacy mode hides the webcam image** (<kbd>V</kbd>), and it is the symmetric
+**Privacy mode hides the webcam image** (<kbd>V</kbd>), and it is the counterpart
 of the skeleton toggle that was already there: `SHOW_SKELETON` draws the hand on
 top of the video, `SHOW_VIDEO` decides whether the video is drawn at all. With it
 off, the frame is never painted — what is left is the skeleton, the targets and

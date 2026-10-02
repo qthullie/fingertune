@@ -48,7 +48,7 @@ const en = {
   'start.card.never': 'Never played',
   'start.phaseNote': 'Starting at *{phase}* — scores from a partial run are still saved.',
   'start.best.label': 'Best score',
-  'start.best.detail': '{accuracy} % · {combo}x combo',
+  'start.best.detail': '{accuracy}% · {combo}x combo',
   'start.tip.sit':
     'Sit ~60–100 cm from the webcam, one hand clearly visible, palm to the camera.',
   'start.tip.hit': 'A hit is going from *fingers apart* to *fingers pinched* on the target.',
@@ -112,13 +112,13 @@ const en = {
   'end.title.challenge': 'Challenge beaten!',
   'end.title.record': 'New record!',
   'end.title.done': 'Run complete',
-  'end.accuracy': '{accuracy} % accuracy',
+  'end.accuracy': '{accuracy}% accuracy',
   'end.maxCombo': 'Max combo {combo}x',
   'end.challenge.beaten': 'Challenge was {score} — beaten by {delta}.',
   'end.challenge.short': 'Challenge was {score} — {delta} short.',
   'end.previous': 'Previous best: {score}',
   'end.first': 'First score saved.',
-  'end.best': 'Best: {score} ({accuracy} %)',
+  'end.best': 'Best: {score} ({accuracy}%)',
   'end.replay': 'Play again',
   'end.share': 'Copy result + challenge link',
   'end.share.ok': 'Copied — send it to someone',
@@ -241,7 +241,7 @@ const fr: Record<MessageKey, string> = {
   'start.tip.hit':
     'Un hit, c’est passer de *doigts écartés* à *doigts pincés* sur la cible.',
   'start.tip.slider':
-    '*Sliders* : pincez la tête, puis *gardez le pincement* et suivez la piste, en suivant la bille dans le sens des flèches, jusqu’au bout.',
+    '*Sliders* : pincez la tête, puis *gardez le pincement* et glissez le long de la piste en suivant la bille dans le sens des flèches, jusqu’au bout.',
   'start.tip.pause':
     'Si la main sort du champ, la partie *se met en pause* — ramenez-la et elle repart.',
   'start.tip.privacy':
@@ -286,7 +286,7 @@ const fr: Record<MessageKey, string> = {
   'pause.title': 'Pause',
   'pause.title.auto': 'Main perdue',
   'pause.body':
-    'La partie reprend un temps avant l’arrêt, pour vous laisser le temps de relire l’écran.',
+    'La partie reprend un temps avant l’arrêt, de quoi vous laisser relire l’écran.',
   'pause.body.auto.1': 'Remettez la main dans le champ et la partie reprend où elle s’est arrêtée.',
   'pause.body.auto.2': 'Rien n’a été jugé pendant son absence.',
   'pause.resume': 'Reprendre',
@@ -321,8 +321,6 @@ const fr: Record<MessageKey, string> = {
   'hud.target.best': 'Votre record',
   'hud.target.challenge': 'Défi',
   'hud.privacy': 'Mode confidentialité — webcam masquée',
-
-
 
   'board.title': 'Classement en ligne',
   'board.name': 'Votre nom',
@@ -391,7 +389,7 @@ const fr: Record<MessageKey, string> = {
   'phase.warmup.name': 'Warm-up',
   'phase.warmup.hint': 'Une note toutes les quatre pulsations. Trouvez le rythme.',
   'phase.drive.name': 'Drive',
-  'phase.drive.hint': 'Toutes les deux pulsations maintenant, de gauche à droite.',
+  'phase.drive.hint': 'Toutes les deux pulsations maintenant, d’un côté à l’autre.',
   'phase.sprint.name': 'Sprint',
   'phase.sprint.hint': 'Rafales de quatre. Respirez entre deux.',
 };

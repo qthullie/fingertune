@@ -178,6 +178,9 @@ export function App(): JSX.Element {
   /* Keyboard shortcuts. */
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
+      // Typing a name on the board is not a command: an "r" in it would start
+      // a new run and throw away the one about to be posted.
+      if (e.target instanceof HTMLInputElement && e.target.type === 'text') return;
       const key = e.key.toLowerCase();
       // Space is the one binding that must not also scroll the page.
       if (key === ' ' || e.code === 'Space') {
