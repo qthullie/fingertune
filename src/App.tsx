@@ -34,6 +34,9 @@ const audio = new AudioEngine();
 
 type UiPhase = 'start' | 'calibrating' | 'playing' | 'end' | 'error';
 
+/** How long the "burned" message stays up before the run restarts on its own. */
+const BURNED_RESTART_MS = 2200;
+
 /** Which slow step the loader is on, as a message key. */
 const STEP_KEYS = {
   runtime: 'status.runtime',
@@ -115,6 +118,15 @@ export function App(): JSX.Element {
         onResume: () => audio.resumeMusic(),
         onFinish: () => {
           const final = engine.getSnapshot();
+          /* Burned: no score, a moment to read why, then straight back in --
+             unless the player already restarted or left in the meantime. */
+          if (final.failed) {
+            audio.stopMusic();
+            window.setTimeout(() => {
+              if (engine.failed && engine.phase === 'finished') startRun();
+            }, BURNED_RESTART_MS);
+            return;
+          }
           const result = submitScore(beatmapRef.current.id, {
             score: final.score,
             accuracy: final.accuracy,
@@ -215,6 +227,14 @@ export function App(): JSX.Element {
     saveHideVideo(hideVideo);
   }, [hideVideo]);
 
+  /* Party mode: the whole interface goes rainbow while a map with psychedelic
+     phases is selected, and back to normal as soon as another one is. */
+  useEffect(() => {
+    const isParty = beatmap.phases.some(p => p.psychedelic);
+    document.body.classList.toggle('party', isParty);
+    return () => { document.body.classList.remove('party'); };
+  }, [beatmap]);
+
   /* Stop the music when the run ends. */
   useEffect(() => {
     if (uiPhase === 'end') audio.stopMusic();
@@ -289,6 +309,12 @@ export function App(): JSX.Element {
           onRestart={startRun}
           onQuit={quitToMenu}
         />
+      )}
+      {uiPhase === 'playing' && snapshot.phase === 'finished' && snapshot.failed && (
+        <div className="overlay overlay--pause overlay--burned">
+          <h1 className="title title--plain">{t('burned.title')}</h1>
+          <p className="subtitle">{t('burned.body')}</p>
+        </div>
       )}
       {uiPhase === 'end' && (
         <EndScreen

@@ -73,6 +73,22 @@ export function computePlayfield(view: View, canvasWidth: number, canvasHeight: 
   );
 }
 
+/**
+ * Inner edges of the flame walls, in CSS pixels, for a wall reaching `margin`
+ * of the way in from each side.
+ *
+ * Measured on the camera area (the playfield before its padding) so a wall
+ * starting at 0 grows from where a hand can actually be, instead of appearing
+ * all at once as a band over the padding. Drawing and hit-testing both go
+ * through here, so the line you see is the line that burns.
+ */
+export function fireEdges(playfield: Playfield, margin: number): { left: number; right: number } {
+  const padding = settings.PLAYFIELD_PADDING;
+  const reach = playfield.width / (1 - 2 * padding);
+  const left = playfield.x - reach * padding;
+  return { left: left + reach * margin, right: left + reach * (1 - margin) };
+}
+
 /** Normalised point inside a rect -> CSS pixels. */
 export function toScreen(area: Rect, p: Vec2): Vec2 {
   return { x: area.x + p.x * area.width, y: area.y + p.y * area.height };

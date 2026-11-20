@@ -213,6 +213,21 @@ const en = {
   'phase.drive.hint': 'Every two beats now, side to side.',
   'phase.sprint.name': 'Sprint',
   'phase.sprint.hint': 'Bursts of four. Breathe between them.',
+  'phase.spark.name': 'Spark',
+  'phase.spark.hint': 'Pinch on the beat. Never pinch a cracked circle.',
+  'phase.ignite.name': 'Ignite',
+  'phase.ignite.hint':
+    'Flames close in from the sides. Keep your hands in the middle: touching them restarts the run.',
+  'phase.surge.name': 'Surge',
+  'phase.surge.hint': 'Faster, and the flames keep growing.',
+  'phase.float.name': 'Float',
+  'phase.float.hint': 'Long arcs. Stay on the ball, away from the fire.',
+  'phase.glory.name': 'GLORY',
+  'phase.glory.hint': 'Short ring, narrow corridor. Everything at once.',
+
+  'burned.title': 'Burned!',
+  'burned.body':
+    'Your hand touched the flames. They close in from both sides, so keep your hands in the middle. Restarting…',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -392,6 +407,21 @@ const fr: Record<MessageKey, string> = {
   'phase.drive.hint': 'Toutes les deux pulsations maintenant, d’un côté à l’autre.',
   'phase.sprint.name': 'Sprint',
   'phase.sprint.hint': 'Rafales de quatre. Respirez entre deux.',
+  'phase.spark.name': 'Spark',
+  'phase.spark.hint': 'Pincez sur le temps. Ne pincez jamais un cercle fissuré.',
+  'phase.ignite.name': 'Ignite',
+  'phase.ignite.hint':
+    'Les flammes se resserrent par les côtés. Gardez les mains au centre : les toucher relance la partie.',
+  'phase.surge.name': 'Surge',
+  'phase.surge.hint': 'Plus vite, et les flammes grandissent encore.',
+  'phase.float.name': 'Float',
+  'phase.float.hint': 'De longs arcs. Restez sur la bille, loin du feu.',
+  'phase.glory.name': 'GLORY',
+  'phase.glory.hint': 'Anneau court, couloir étroit. Tout à la fois.',
+
+  'burned.title': 'Brûlé !',
+  'burned.body':
+    'Votre main a touché les flammes. Elles se resserrent des deux côtés : gardez les mains au centre. On recommence…',
 };
 
 const DICTIONARIES: Record<Lang, Record<MessageKey, string>> = { en, fr };

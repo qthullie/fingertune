@@ -11,7 +11,7 @@
 import { GRADE_STYLE, settings } from '../config/settings';
 import { EffectSystem } from './effects';
 import type { Beatmap, BeatmapPhase, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
-import { pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
+import { fireEdges, pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
 import { pointAt, prepareSliderPath, sliderProgress } from './slider';
 
 /** A cursor reported by the render loop, in CSS pixels. */
@@ -53,6 +53,9 @@ export class GameEngine {
   private phases: BeatmapPhase[] = [];
   /** Index, in the beatmap's own phase list, that this run started from. */
   private startPhase = 0;
+  private lastBeat = -1;
+  private _bgHueOffset = 0;
+  private _failed = false;
 
   private t0 = 0;
   private clock: () => number = () => performance.now() / 1000;
@@ -100,6 +103,7 @@ export class GameEngine {
       duration: this.duration,
       handVisible: this.handVisible,
       autoPaused: this.autoPaused,
+      failed: this._failed,
     };
   }
 
@@ -195,6 +199,7 @@ export class GameEngine {
         goodWindow: settings.WINDOW_GOOD * windowScale,
         radius: settings.TARGET_RADIUS * (phase?.targetScale ?? 1),
         phaseIndex,
+        ...(phase?.color !== undefined && { color: phase.color }),
 
         points: path.points,
         cumulative: path.cumulative,
@@ -223,6 +228,9 @@ export class GameEngine {
     this.handLostFor = 0;
     this.phaseIndex = 0;
     this.phaseEventId += 1;
+    this.lastBeat = -1;
+    this._bgHueOffset = 0;
+    this._failed = false;
     this.t0 = startAt ?? this.clock();
     this.publish();
     this.onPhaseChange?.(this.startPhase, this.phases[0]);
@@ -266,6 +274,38 @@ export class GameEngine {
 
   get currentPhaseIndex(): number {
     return this.phaseIndex;
+  }
+
+  get currentPhase(): BeatmapPhase | undefined {
+    return this.phases[this.phaseIndex];
+  }
+
+  get bgHueOffset(): number { return this._bgHueOffset; }
+
+  get failed(): boolean { return this._failed; }
+
+  /**
+   * How far the flame walls reach in from each side right now (see
+   * `BeatmapPhase.fire`): a steady climb across the phase, from where the
+   * previous one left off, so the corridor never jumps shut under a hand.
+   */
+  get fireZoneMargin(): number {
+    const phase = this.phases[this.phaseIndex];
+    if (!phase?.fire) return 0;
+    const from = this.phases[this.phaseIndex - 1]?.fire ?? 0;
+    const end = this.phases[this.phaseIndex + 1]?.start ?? this.duration;
+    const progress = Math.min(1, Math.max(0, (this.time - phase.start) / (end - phase.start)));
+    return from + (phase.fire - from) * progress;
+  }
+
+  /** Ends the run immediately — the player entered a fire zone. */
+  fail(): void {
+    if (this.phase !== 'playing') return;
+    this._failed = true;
+    this.effects.flash('#ff3300', 0.7);
+    this.phase = 'finished';
+    this.publish();
+    this.onFinish?.();
   }
 
   /** Targets currently displayed / judgeable (approach window is per phase). */
@@ -394,10 +434,33 @@ export class GameEngine {
       this.phaseEventId += 1;
       this.snapshotDirty = true;
       this.onPhaseChange?.(this.startPhase + phaseIndex, this.phases[phaseIndex]);
+      const newPhase = this.phases[phaseIndex];
+      if (newPhase?.color) {
+        this.effects.flash(newPhase.color, 0.45);
+        this.effects.burst({ x: 0.5, y: 0.5 }, newPhase.color, 50);
+      }
+    }
+
+    // Beat pulse: subtle flash each beat when the phase has a colour.
+    if (this.beatmap) {
+      const beat = Math.floor(this.time / (60 / this.beatmap.bpm));
+      if (beat !== this.lastBeat && this.time >= settings.COUNTDOWN) {
+        this.lastBeat = beat;
+        const phase = this.phases[this.phaseIndex];
+        if (phase?.color) this.effects.flash(phase.color, 0.04);
+      }
     }
 
     for (const target of this.targets) {
       if (target.dead) continue;
+
+      // Hazard: silently expire if not pinched; penalise only if pinched.
+      if (target.kind === 'hazard') {
+        if (this.time > target.t + target.goodWindow) {
+          target.dead = true;
+        }
+        continue;
+      }
 
       // Head never hit: a miss, for a circle and for a slider alike.
       if (target.sliderState === 'pending' && this.time > target.t + target.goodWindow) {
@@ -459,6 +522,11 @@ export class GameEngine {
     // on empty space).
     if (!grade) return false;
 
+    if (best.kind === 'hazard') {
+      this.judge(best, 'MISS');
+      return true;
+    }
+
     this.judge(best, grade);
     return true;
   }
@@ -479,6 +547,17 @@ export class GameEngine {
    */
   trackSliders(cursors: readonly CursorInput[], playfield: Playfield, dt: number): void {
     if (this.phase !== 'playing') return;
+
+    // Fire zone: touching the flame walls ends the run immediately.
+    const margin = this.fireZoneMargin;
+    if (margin > 0) {
+      const edges = fireEdges(playfield, margin);
+      if (cursors.some((c) => c.position.x < edges.left || c.position.x > edges.right)) {
+        this.fail();
+        return;
+      }
+    }
+
     const now = this.time;
 
     for (const target of this.targets) {
@@ -585,6 +664,12 @@ export class GameEngine {
       this.maxCombo = Math.max(this.maxCombo, this.combo);
       this.effects.burst(at, style.color, grade === 'PERFECT' ? 26 : 14);
       this.effects.flash(style.color, grade === 'PERFECT' ? 0.28 : 0.16);
+      if (target.color) this.effects.burst(at, target.color, grade === 'PERFECT' ? 20 : 8);
+      if (this.currentPhase?.psychedelic) {
+        const palette = ['#ff0066','#00ffcc','#ff9900','#ff00ff','#00ff88','#ffff00','#ff3300','#00aaff'];
+        this.effects.flash(palette[Math.floor(Math.random() * palette.length)]!, 0.09);
+        this._bgHueOffset += 40 + Math.random() * 120;
+      }
       this.onHitSound?.(grade, this.combo);
     }
     this.snapshotDirty = true;

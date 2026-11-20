@@ -369,6 +369,10 @@ a mirrored image and gets it wrong often enough that a correct hit would
 sometimes be judged a miss. Its three phases are three kinds of coordination:
 mirror, alternate, and one hand holding a slider while the other taps.
 
+**And a fifth.** It is on the start screen with the others, and this README
+will say no more about it than that it does not play like them. Pick it and
+find out.
+
 **A run can start at any phase.** Everything before it is dropped and the rest
 slides back to zero, so starting at the last phase is a real run at that
 difficulty rather than a fast-forward.
@@ -572,6 +576,7 @@ src/
   components/         GameCanvas (loop), Hud, Leaderboard, and the Start,
                       Calibration, Pause, End, Error and Mobile screens
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
+  assets/             a looping backdrop video, rendered by a script below
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
 supabase/
@@ -582,6 +587,7 @@ scripts/
   check-beatmaps.mjs  every chart validated before a build ships it
   fetch-model.mjs     the hand model, for running fully offline
   make-og.mjs         draws public/og-card.png, the link-preview card
+  make-psychedelic-video.mjs  renders that backdrop with ffmpeg
   fonts/              Inter, for the card only (OFL, see scripts/fonts)
 ```
 

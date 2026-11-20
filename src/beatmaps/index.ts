@@ -1,10 +1,11 @@
 /** Catalogue of available beatmaps. Register yours here. */
 
 import type { Beatmap } from '../game/types';
+import { chromaticBeatmap } from './chromatic';
 import { demoBeatmap } from './demo';
-import { pulseBeatmap } from './pulse';
 import { driftBeatmap } from './drift';
 import { duetBeatmap } from './duet';
+import { pulseBeatmap } from './pulse';
 
 /**
  * Ordered as a first-time player should meet them.
@@ -18,7 +19,7 @@ import { duetBeatmap } from './duet';
  * Duet is last because it is the only one that needs both hands, which is a
  * coordination problem rather than a harder version of the same one.
  */
-export const beatmaps: Beatmap[] = [demoBeatmap, pulseBeatmap, driftBeatmap, duetBeatmap];
+export const beatmaps: Beatmap[] = [demoBeatmap, pulseBeatmap, driftBeatmap, duetBeatmap, chromaticBeatmap];
 
 export const defaultBeatmap: Beatmap = demoBeatmap;
 
