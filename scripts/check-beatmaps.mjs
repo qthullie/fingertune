@@ -30,6 +30,7 @@ const MAPS = [
   ['pulse', 'pulseBeatmap'],
   ['drift', 'driftBeatmap'],
   ['duet', 'duetBeatmap'],
+  ['chromatic', 'chromaticBeatmap'],
 ];
 
 const out = mkdtempSync(join(tmpdir(), 'fingertune-maps-'));

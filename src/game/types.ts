@@ -10,7 +10,7 @@ export type GamePhase = 'idle' | 'playing' | 'paused' | 'finished';
  *  - `slider`: pinch on the head, then HOLD the pinch and follow the ball along
  *    the path, in the direction it travels, until the end.
  */
-export type NoteKind = 'circle' | 'slider';
+export type NoteKind = 'circle' | 'slider' | 'hazard';
 
 /** A beatmap note. x and y are normalised 0..1 inside the playfield. */
 export interface BeatmapNote {
@@ -65,6 +65,19 @@ export interface BeatmapPhase {
   hitWindowScale: number;
   /** Multiplier on target radius (and therefore on spatial tolerance). */
   targetScale: number;
+  /** Optional CSS colour for this phase's note disc. Defaults to PALETTE.cyan. */
+  color?: string;
+  /**
+   * Plays the phase over the looping psychedelic video, whose colours jump on
+   * every hit. A map with any such phase also turns the interface rainbow.
+   */
+  psychedelic?: boolean;
+  /**
+   * Flame walls closing in from both sides: how far each one reaches by the end
+   * of the phase, as a fraction of the camera area's width. They grow steadily
+   * from the previous phase's value, and touching them restarts the run.
+   */
+  fire?: number;
 }
 
 export interface Beatmap {
@@ -103,6 +116,8 @@ export interface Target extends BeatmapNote {
   /** Effective radius (fraction of the playfield's smaller side). */
   radius: number;
   phaseIndex: number;
+  /** Phase accent colour, if the phase defines one. */
+  color?: string;
 
   /* ---- Sliders only ---------------------------------------------------- */
   /** Full polyline, head included, in playfield coordinates. */
@@ -159,4 +174,6 @@ export interface GameSnapshot {
   phaseHint: string;
   /** Increments on every phase change: used as a `key` for the banner. */
   phaseEventId: number;
+  /** True if the run ended because the player touched a fire zone. */
+  failed: boolean;
 }

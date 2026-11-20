@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import logoUrl from '../../assets/logo.svg';
 import type { Beatmap } from '../game/types';
 import type { BestScore } from '../lib/highscores';
@@ -71,6 +72,16 @@ export function StartScreen({
   const t = useT();
   const startPhaseName = selected.phases[startPhase];
 
+  const [pop, setPop] = useState<{ id: string; k: number } | null>(null);
+  useEffect(() => {
+    if (!pop) return;
+    const timer = setTimeout(() => setPop(null), 350);
+    return () => clearTimeout(timer);
+  }, [pop]);
+
+  const accentColor = (beatmap: Beatmap): string | undefined =>
+    beatmap.phases.find((p) => p.color)?.color;
+
   return (
     <div className="overlay overlay--start">
       <div className="topbar">
@@ -96,8 +107,14 @@ export function StartScreen({
               type="button"
               role="radio"
               aria-checked={active}
-              className={`card${active ? ' card--active' : ''}`}
-              onClick={() => onSelect(beatmap)}
+              className={[
+                'card',
+                active ? 'card--active' : '',
+                accentColor(beatmap) ? 'card--accented' : '',
+                pop?.id === beatmap.id ? 'card--pop' : '',
+              ].filter(Boolean).join(' ')}
+              style={{ '--card-accent': accentColor(beatmap) } as React.CSSProperties}
+              onClick={() => { onSelect(beatmap); setPop({ id: beatmap.id, k: Date.now() }); }}
             >
               <span className="card-title">
                 {t.or(`map.${beatmap.id}.title`, beatmap.title)}
