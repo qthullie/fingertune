@@ -242,6 +242,14 @@ in the wrong direction than the lag it was correcting. `PREDICT_MAX_STEP` caps a
 single frame's extrapolation below the width of a target, so the worst case is a
 near miss rather than a lurch across the playfield.
 
+**The hand moves on every frame, not every detection.** The webcam delivers
+~30 frames a second to a loop that draws 60, so the cursor and the skeleton
+used to hold still for a frame and then jump. Between two detections each
+landmark is now carried along that same velocity for the time elapsed since the
+last one, under the same ceiling, and for 100 ms at most so a stalled pipeline
+freezes the hand instead of throwing it. Only positions move: a pinch is still
+decided on detections alone.
+
 Tune it against your own machine rather than against a number: press <kbd>D</kbd>
 and watch the reported offset on your hits. Consistently late, raise
 `PREDICT_AHEAD`; consistently early, lower it. At `0` this is the behaviour from
@@ -266,6 +274,7 @@ while you pinch is the fastest way to pick your own numbers.
 | `THREADED_INFERENCE` | `true` | run MediaPipe in a Web Worker (falls back inline on its own) |
 | `PREDICT_AHEAD` | `0.045 s` | how far ahead the cursor is projected — raise it if hits read late |
 | `PREDICT_MAX_STEP` | `0.06` | ceiling on one frame's extrapolation, so a reversal cannot lurch |
+| `EXTRAPOLATE_BETWEEN_FRAMES` | `true` | keep the hand moving at 60 fps between two ~30 fps detections |
 | `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones (<kbd>S</kbd>) |
 | `SHOW_VIDEO` | `true` | draw the webcam image at all — off is privacy mode (<kbd>V</kbd>) |
 | `PIXEL_SCALE` | `1` | screen pixels per rendered pixel; above 1 the playfield goes blocky |
