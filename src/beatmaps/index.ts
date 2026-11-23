@@ -2,6 +2,7 @@
 
 import type { Beatmap } from '../game/types';
 import { chromaticBeatmap } from './chromatic';
+import { constellationBeatmap } from './constellation';
 import { demoBeatmap } from './demo';
 import { driftBeatmap } from './drift';
 import { duetBeatmap } from './duet';
@@ -18,8 +19,18 @@ import { pulseBeatmap } from './pulse';
  *
  * Duet is last because it is the only one that needs both hands, which is a
  * coordination problem rather than a harder version of the same one.
+ *
+ * Constellation closes the list: it asks for nothing the others have not
+ * taught, and is built as a finale -- one song, one sky, one figure per phase.
  */
-export const beatmaps: Beatmap[] = [demoBeatmap, pulseBeatmap, driftBeatmap, duetBeatmap, chromaticBeatmap];
+export const beatmaps: Beatmap[] = [
+  demoBeatmap,
+  pulseBeatmap,
+  driftBeatmap,
+  duetBeatmap,
+  chromaticBeatmap,
+  constellationBeatmap,
+];
 
 export const defaultBeatmap: Beatmap = demoBeatmap;
 

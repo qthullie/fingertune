@@ -187,6 +187,7 @@ const en = {
   'map.drift.title': 'Drift',
   'map.duet.title': 'Duet',
   'map.pulse.title': 'Pulse',
+  'map.constellation.title': 'Constellation',
 
   /* -- phases -- */
   'phase.easy.name': 'Phase 1 — Easy',
@@ -224,6 +225,14 @@ const en = {
   'phase.float.hint': 'Long arcs. Stay on the ball, away from the fire.',
   'phase.glory.name': 'GLORY',
   'phase.glory.hint': 'Short ring, narrow corridor. Everything at once.',
+  'phase.dusk.name': 'Dusk',
+  'phase.dusk.hint': 'Every note you hit becomes a star. Link them up.',
+  'phase.rise.name': 'Rise',
+  'phase.rise.hint': 'The sky is speeding up. Stay on the beat.',
+  'phase.supernova.name': 'Supernova',
+  'phase.supernova.hint': 'Draw the star. Do not break the line.',
+  'phase.afterglow.name': 'Afterglow',
+  'phase.afterglow.hint': 'Look up: everything you drew is still there.',
 
   'burned.title': 'Burned!',
   'burned.body':
@@ -381,6 +390,7 @@ const fr: Record<MessageKey, string> = {
   'map.drift.title': 'Drift',
   'map.duet.title': 'Duet',
   'map.pulse.title': 'Pulse',
+  'map.constellation.title': 'Constellation',
 
   'phase.easy.name': 'Phase 1 — Facile',
   'phase.easy.hint':
@@ -418,6 +428,14 @@ const fr: Record<MessageKey, string> = {
   'phase.float.hint': 'De longs arcs. Restez sur la bille, loin du feu.',
   'phase.glory.name': 'GLORY',
   'phase.glory.hint': 'Anneau court, couloir étroit. Tout à la fois.',
+  'phase.dusk.name': 'Dusk',
+  'phase.dusk.hint': 'Chaque note touchée devient une étoile. Reliez-les.',
+  'phase.rise.name': 'Rise',
+  'phase.rise.hint': 'Le ciel s’accélère. Restez sur le temps.',
+  'phase.supernova.name': 'Supernova',
+  'phase.supernova.hint': 'Tracez l’étoile. Ne cassez pas la ligne.',
+  'phase.afterglow.name': 'Afterglow',
+  'phase.afterglow.hint': 'Levez les yeux : tout ce que vous avez tracé est encore là.',
 
   'burned.title': 'Brûlé !',
   'burned.body':

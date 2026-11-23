@@ -18,6 +18,10 @@
  * hit it. Raising `PIXEL_SCALE` above 1 turns the whole canvas blocky for
  * anyone who wants that, and `unit()` below is what keeps every mark the same
  * weight on screen when they do.
+ *
+ * Phases with a `sky` are the exception to the paper, and sky.ts explains it.
+ * Here it only means the neutral colours come from the frame's `Ink` rather
+ * than straight from PALETTE.
  */
 
 import psychedelicUrl from '../assets/psychedelic.mp4';
@@ -26,6 +30,7 @@ import type { GameEngine } from '../game/engine';
 import { directionAt, pointAt, sliderProgress } from '../game/slider';
 import type { Target } from '../game/types';
 import { HAND_CONNECTIONS, LANDMARK_COUNT, type HandState } from '../lib/handTracking';
+import { NIGHT_INK, drawConstellations, drawGlow, drawSky, skyColor } from './sky';
 import { fireEdges, radiusPx, toScreen, type Playfield, type View } from './view';
 
 export interface RenderInput {
@@ -79,16 +84,51 @@ function withAlpha(ctx: CanvasRenderingContext2D, alpha: number, draw: () => voi
   ctx.globalAlpha = previous;
 }
 
+/**
+ * The neutral colours of a frame: paper and ink, or their counterparts on a
+ * night sky. Colour proper -- the logo's two hues, phase accents, the red of a
+ * miss -- is the same on both.
+ */
+interface Ink {
+  paper: string;
+  paperShade: string;
+  rule: string;
+  ink: string;
+  inkSoft: string;
+  /** Drawing on a sky: light marks, and light that adds up instead of covering. */
+  night: boolean;
+}
+
+const DAY_INK: Ink = {
+  paper: PALETTE.paper,
+  paperShade: PALETTE.paperShade,
+  rule: PALETTE.rule,
+  ink: PALETTE.ink,
+  inkSoft: PALETTE.inkSoft,
+  night: false,
+};
+
+interface Frame extends RenderInput {
+  ink: Ink;
+}
+
 export function renderFrame(input: RenderInput): void {
-  drawBackground(input);
-  drawPsychedelic(input);
-  if (settings.SHOW_PLAYFIELD) drawPlayfield(input);
-  drawFireWalls(input);
-  drawTargets(input);
-  drawEffects(input);
-  drawHands(input);
-  if (settings.SHOW_PINCH_METER) drawPinchMeter(input);
-  if (settings.DEBUG) drawDebug(input);
+  const sky = skyColor(input.engine);
+  const frame: Frame = { ...input, ink: sky ? { ...NIGHT_INK, paper: sky, night: true } : DAY_INK };
+
+  drawBackground(frame);
+  if (frame.ink.night) {
+    drawSky({ ctx: frame.ctx, width: frame.width, height: frame.height, engine: frame.engine, u: unit() });
+    drawConstellations(frame.ctx, frame.playfield, frame.engine, unit());
+  }
+  drawPsychedelic(frame);
+  if (settings.SHOW_PLAYFIELD) drawPlayfield(frame);
+  drawFireWalls(frame);
+  drawTargets(frame);
+  drawEffects(frame);
+  drawHands(frame);
+  if (settings.SHOW_PINCH_METER) drawPinchMeter(frame);
+  if (settings.DEBUG) drawDebug(frame);
 }
 
 /* ------------------------------------------------------------------ video ---- */
@@ -104,8 +144,8 @@ export function renderFrame(input: RenderInput): void {
  * With the video on, a white veil sits over it. Without the veil the targets
  * compete with a photograph for attention, and the photograph wins.
  */
-function drawBackground({ ctx, width, height, view, video }: RenderInput): void {
-  ctx.fillStyle = PALETTE.paper;
+function drawBackground({ ctx, width, height, view, video, ink }: Frame): void {
+  ctx.fillStyle = ink.paper;
   ctx.fillRect(0, 0, width, height);
 
   if (!settings.SHOW_VIDEO || !video || video.videoWidth === 0) return;
@@ -117,8 +157,9 @@ function drawBackground({ ctx, width, height, view, video }: RenderInput): void 
   ctx.drawImage(video, 0, 0, view.width, view.height);
   ctx.restore();
 
-  withAlpha(ctx, 0.62, () => {
-    ctx.fillStyle = PALETTE.paper;
+  // Heavier on a sky: the stars are faint, and a room behind them is not.
+  withAlpha(ctx, ink.night ? 0.88 : 0.62, () => {
+    ctx.fillStyle = ink.paper;
     ctx.fillRect(0, 0, width, height);
   });
 }
@@ -162,10 +203,10 @@ function drawPsychedelic({ ctx, width, height, engine }: RenderInput): void {
 }
 
 /** Debug outline of the area targets can occupy. */
-function drawPlayfield({ ctx, playfield }: RenderInput): void {
+function drawPlayfield({ ctx, playfield, ink }: Frame): void {
   const stroke = strokes();
   ctx.save();
-  ctx.strokeStyle = PALETTE.rule;
+  ctx.strokeStyle = ink.rule;
   ctx.lineWidth = stroke.hair;
   ctx.setLineDash([6, 6]);
   ctx.strokeRect(playfield.x, playfield.y, playfield.width, playfield.height);
@@ -281,6 +322,7 @@ function drawSlider(
   target: Target,
   now: number,
   rTarget: number,
+  ink: Ink,
 ): void {
   if (target.points.length < 2) return;
 
@@ -310,7 +352,7 @@ function drawSlider(
 
   // Casing: paper, so the track carves a channel out of whatever is behind it.
   trace();
-  ctx.strokeStyle = PALETTE.paper;
+  ctx.strokeStyle = ink.paper;
   ctx.lineWidth = rTarget * 2 + stroke.heavy;
   ctx.stroke();
 
@@ -339,7 +381,7 @@ function drawSlider(
     ctx.save();
     ctx.translate(at.x, at.y);
     ctx.rotate(Math.atan2(dir.y, dir.x));
-    ctx.strokeStyle = PALETTE.ink;
+    ctx.strokeStyle = ink.ink;
     ctx.lineWidth = stroke.thin;
     ctx.beginPath();
     ctx.moveTo(-size * 0.5, -size * 0.55);
@@ -352,7 +394,7 @@ function drawSlider(
   // Tail marker.
   const tail = screen[screen.length - 1];
   if (tail) {
-    ctx.strokeStyle = PALETTE.ink;
+    ctx.strokeStyle = ink.ink;
     ctx.lineWidth = stroke.thin;
     ctx.beginPath();
     ctx.arc(tail.x, tail.y, rTarget * 0.75, 0, Math.PI * 2);
@@ -373,11 +415,11 @@ function drawSlider(
       ctx.stroke();
     }
 
-    ctx.fillStyle = holding ? PALETTE.pink : PALETTE.paper;
+    ctx.fillStyle = holding ? PALETTE.pink : ink.paper;
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, rTarget * 0.55, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = PALETTE.ink;
+    ctx.strokeStyle = ink.ink;
     ctx.lineWidth = stroke.thin;
     ctx.stroke();
   }
@@ -432,7 +474,7 @@ function drawHazard(
   ctx.restore();
 }
 
-function drawTargets({ ctx, playfield, engine }: RenderInput): void {
+function drawTargets({ ctx, playfield, engine, ink }: Frame): void {
   const now = engine.time;
   const stroke = strokes();
 
@@ -472,12 +514,22 @@ function drawTargets({ ctx, playfield, engine }: RenderInput): void {
     }
 
     // Slider body first: the head is drawn on top of it.
-    if (target.kind === 'slider') drawSlider(ctx, playfield, target, now, rTarget);
+    if (target.kind === 'slider') drawSlider(ctx, playfield, target, now, rTarget, ink);
 
     // Once a slider is grabbed, its head is done; only the body still matters.
     if (target.kind === 'slider' && target.sliderState !== 'pending') {
       ctx.restore();
       continue;
+    }
+
+    // On a sky the target gathers light as its ring closes, so the note to
+    // play next is the brightest thing on screen before it is the largest.
+    if (ink.night) {
+      const k = Math.min(progress, 1);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      drawGlow(ctx, p, rTarget * (1.6 + k), target.color ?? PALETTE.cyan, 0.15 + 0.35 * k + (inPerfect ? 0.3 : 0));
+      ctx.restore();
     }
 
     // Disc: one flat colour. The logo's cyan is the target's colour, and the
@@ -491,7 +543,7 @@ function drawTargets({ ctx, playfield, engine }: RenderInput): void {
 
     // Ring: ink at rest, magenta on the beat.
     ctx.lineWidth = inPerfect ? stroke.bold : stroke.thin;
-    ctx.strokeStyle = inPerfect ? PALETTE.pink : PALETTE.ink;
+    ctx.strokeStyle = inPerfect ? PALETTE.pink : ink.ink;
     ctx.beginPath();
     ctx.arc(p.x, p.y, rTarget, 0, Math.PI * 2);
     ctx.stroke();
@@ -515,16 +567,22 @@ function drawTargets({ ctx, playfield, engine }: RenderInput): void {
 
 /* ---------------------------------------------------------------- effects ---- */
 
-function drawEffects({ ctx, width, height, playfield, engine }: RenderInput): void {
+function drawEffects({ ctx, width, height, playfield, engine, ink }: Frame): void {
   const { effects } = engine;
   const stroke = strokes();
+  // On a sky, effects are light: they add up and glow instead of covering.
+  const blend: GlobalCompositeOperation = ink.night ? 'lighter' : 'source-over';
 
   for (const effect of effects.items) {
     const p = toScreen(playfield, effect);
+    // Effects made in ink (a GOOD, a stray pinch) follow the ink, or they
+    // would be dark marks on a dark sky.
+    const color = effect.color === PALETTE.ink ? ink.ink : effect.color;
     ctx.save();
+    ctx.globalCompositeOperation = blend;
     ctx.globalAlpha = Math.max(0, effect.life);
     if (effect.kind === 'particle') {
-      ctx.fillStyle = effect.color;
+      ctx.fillStyle = color;
       ctx.beginPath();
       ctx.arc(p.x, p.y, effect.size * effect.life * stroke.u * 0.6, 0, Math.PI * 2);
       ctx.fill();
@@ -532,21 +590,21 @@ function drawEffects({ ctx, width, height, playfield, engine }: RenderInput): vo
       // Pinch recognised, nothing hit: a small ring that tightens.
       const r = radiusPx(playfield, settings.TARGET_RADIUS) * (0.55 + effect.life * 0.35);
       ctx.globalAlpha = Math.max(0, effect.life) * 0.65;
-      ctx.strokeStyle = effect.color;
+      ctx.strokeStyle = color;
       ctx.lineWidth = stroke.hair;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.stroke();
     } else if (effect.kind === 'ring') {
       const r = radiusPx(playfield, settings.TARGET_RADIUS) * (1 + (1 - effect.life) * 1.8);
-      ctx.strokeStyle = effect.color;
+      ctx.strokeStyle = color;
       ctx.lineWidth = Math.max(stroke.hair, stroke.bold * effect.life);
       ctx.beginPath();
       ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.stroke();
     } else {
       const r = radiusPx(playfield, settings.TARGET_RADIUS) * 0.6;
-      ctx.strokeStyle = effect.color;
+      ctx.strokeStyle = color;
       ctx.lineWidth = stroke.bold;
       ctx.lineCap = 'round';
       ctx.beginPath();
@@ -561,6 +619,7 @@ function drawEffects({ ctx, width, height, playfield, engine }: RenderInput): vo
 
   if (effects.flashAmount > 0.001) {
     ctx.save();
+    ctx.globalCompositeOperation = blend;
     // Halved: a full-strength flash of colour over white is a white-out.
     ctx.globalAlpha = effects.flashAmount * 0.5;
     ctx.fillStyle = effects.flashColor;
@@ -583,7 +642,7 @@ function handAccent(hand: HandState): string {
  * image the paper pass is what keeps the bones legible over a dark sleeve; in
  * privacy mode it is invisible and costs nothing.
  */
-function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState): void {
+function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState, ink: Ink): void {
   const points = hand.landmarks;
   if (points.length < LANDMARK_COUNT) return;
 
@@ -596,7 +655,7 @@ function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState
   ctx.lineJoin = 'round';
 
   for (const pass of [0, 1]) {
-    ctx.strokeStyle = pass === 0 ? PALETTE.paper : accent;
+    ctx.strokeStyle = pass === 0 ? ink.paper : accent;
     ctx.lineWidth = pass === 0 ? stroke.heavy : stroke.thin;
     ctx.beginPath();
     for (const [a, b] of HAND_CONNECTIONS) {
@@ -614,7 +673,7 @@ function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState
   for (let i = 0; i < screen.length; i++) {
     const p = screen[i];
     if (!p) continue;
-    ctx.fillStyle = tips.has(i) ? accent : PALETTE.ink;
+    ctx.fillStyle = tips.has(i) ? accent : ink.ink;
     ctx.beginPath();
     ctx.arc(p.x, p.y, (tips.has(i) ? 2 : 1.3) * stroke.u, 0, Math.PI * 2);
     ctx.fill();
@@ -622,14 +681,14 @@ function drawSkeleton(ctx: CanvasRenderingContext2D, view: View, hand: HandState
   ctx.restore();
 }
 
-function drawHands({ ctx, view, hands }: RenderInput): void {
+function drawHands({ ctx, view, hands, ink }: Frame): void {
   const stroke = strokes();
 
   for (const hand of hands) {
     if (!hand.visible || !hand.thumb || !hand.index || !hand.pinchPos) continue;
 
     // Skeleton first: it sits under the pinch markers.
-    if (settings.SHOW_SKELETON) drawSkeleton(ctx, view, hand);
+    if (settings.SHOW_SKELETON) drawSkeleton(ctx, view, hand, ink);
 
     const thumb = toScreen(view, hand.thumb);
     const index = toScreen(view, hand.index);
@@ -641,7 +700,7 @@ function drawHands({ ctx, view, hands }: RenderInput): void {
 
     // Thumb-index line: thickens and turns magenta while the pinch is active.
     ctx.lineWidth = hand.pinching ? stroke.heavy : stroke.thin;
-    ctx.strokeStyle = hand.pinching ? PALETTE.pink : PALETTE.ink;
+    ctx.strokeStyle = hand.pinching ? PALETTE.pink : ink.ink;
     ctx.beginPath();
     ctx.moveTo(thumb.x, thumb.y);
     ctx.lineTo(index.x, index.y);
@@ -653,12 +712,12 @@ function drawHands({ ctx, view, hands }: RenderInput): void {
       ctx.beginPath();
       ctx.arc(point.x, point.y, (hand.pinching ? 4.5 : 3.5) * stroke.u, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = PALETTE.ink;
+      ctx.strokeStyle = ink.ink;
       ctx.lineWidth = stroke.hair;
       ctx.stroke();
     }
 
-    drawCursor(ctx, mid, hand.pinching, stroke);
+    drawCursor(ctx, mid, hand.pinching, stroke, ink);
     ctx.restore();
   }
 }
@@ -676,11 +735,12 @@ function drawCursor(
   at: { x: number; y: number },
   pinching: boolean,
   stroke: Strokes,
+  ink: Ink,
 ): void {
   const half = (pinching ? 7 : 5.5) * stroke.u;
   const arm = half * 0.55;
 
-  ctx.strokeStyle = pinching ? PALETTE.pink : PALETTE.ink;
+  ctx.strokeStyle = pinching ? PALETTE.pink : ink.ink;
   ctx.lineWidth = pinching ? stroke.bold : stroke.thin;
   ctx.lineCap = 'round';
   ctx.beginPath();
@@ -700,7 +760,7 @@ function drawCursor(
   ctx.stroke();
 
   // Centre dot: the exact point hit tests use, so a near-miss is explainable.
-  ctx.fillStyle = pinching ? PALETTE.pink : PALETTE.ink;
+  ctx.fillStyle = pinching ? PALETTE.pink : ink.ink;
   ctx.beginPath();
   ctx.arc(at.x, at.y, stroke.u, 0, Math.PI * 2);
   ctx.fill();
@@ -717,7 +777,7 @@ function drawCursor(
  * game. It matters more in privacy mode, where the webcam image is no longer
  * there to tell you the camera is working.
  */
-function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
+function drawPinchMeter({ ctx, width, height, hands, ink }: Frame): void {
   const visible = hands.filter((hand) => hand.visible);
   if (visible.length === 0) return;
 
@@ -732,14 +792,14 @@ function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
     const scale = (value: number): number => Math.min(value / 1.2, 1) * barWidth;
 
     ctx.save();
-    ctx.fillStyle = PALETTE.paper;
+    ctx.fillStyle = ink.paper;
     ctx.fillRect(x - 4 * u, y - 10 * u, barWidth + 8 * u, barHeight + 14 * u);
-    ctx.strokeStyle = PALETTE.rule;
+    ctx.strokeStyle = ink.rule;
     ctx.lineWidth = hair;
     ctx.strokeRect(x - 4 * u, y - 10 * u, barWidth + 8 * u, barHeight + 14 * u);
 
     // Track, plus the "pinched" zone (below the low threshold).
-    ctx.fillStyle = PALETTE.paperShade;
+    ctx.fillStyle = ink.paperShade;
     ctx.fillRect(x, y, barWidth, barHeight);
     withAlpha(ctx, 0.3, () => {
       ctx.fillStyle = PALETTE.pink;
@@ -752,11 +812,11 @@ function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
 
     // Both thresholds.
     for (const threshold of [settings.PINCH_ON_RATIO, settings.PINCH_OFF_RATIO]) {
-      ctx.fillStyle = PALETTE.ink;
+      ctx.fillStyle = ink.ink;
       ctx.fillRect(x + scale(threshold) - u / 2, y - u, u, barHeight + 2 * u);
     }
 
-    ctx.fillStyle = PALETTE.inkSoft;
+    ctx.fillStyle = ink.inkSoft;
     ctx.font = `600 ${5.5 * u}px 'Segoe UI', system-ui, sans-serif`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
@@ -768,13 +828,13 @@ function drawPinchMeter({ ctx, width, height, hands }: RenderInput): void {
 
 /* ------------------------------------------------------------------ debug ---- */
 
-function drawDebug({ ctx, engine, hands, fps, threaded }: RenderInput): void {
+function drawDebug({ ctx, engine, hands, fps, threaded, ink }: Frame): void {
   const u = unit();
   ctx.save();
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.font = `500 ${6 * u}px monospace`;
-  ctx.fillStyle = PALETTE.ink;
+  ctx.fillStyle = ink.ink;
   const lines = [
     `fps ${fps.toFixed(0)}   t ${engine.time.toFixed(2)}s`,
     ...hands.map(

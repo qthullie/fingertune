@@ -75,6 +75,10 @@
   --ink: #16162a;
   --ink-soft: #61617a;
 
+  /* Ink for words over a night sky (NIGHT_INK in render/sky.ts). */
+  --night-ink: #f4f1ff;
+  --night-ink-soft: #b9b4d9;
+
   --font-pixel: 'Press Start 2P', 'Courier New', monospace;
   --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -648,6 +652,24 @@ button:disabled {
   padding: 0 calc(var(--px) / 2);
   color: var(--ink);
   background: var(--cyan);
+}
+
+/*
+ * Phases on a night sky (render/sky.ts). Words that stand on the canvas turn
+ * light; words that sit on a block of their own -- the banner, a grade, the
+ * hot combo -- keep the ink of that block, so a GOOD, which has no colour of
+ * its own, gets a paper block to stand on.
+ */
+.hud--night :is(.hud-score-value, .hud-combo:not(.hud-combo--hot), .hud-countdown-number, .hud-target-value) {
+  color: var(--night-ink);
+}
+
+.hud--night :is(.hud-accuracy, .hud-status, .hud-target-label, .hud-grade-offset, .hud-countdown-hint) {
+  color: var(--night-ink-soft);
+}
+
+.hud--night .hud-grade-label {
+  background-color: var(--paper);
 }
 
 /* ------------------------------------------------------------------ results -- */

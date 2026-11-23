@@ -33,7 +33,7 @@ export function Hud({ snapshot, target }: Props): JSX.Element | null {
   const delta = target ? snapshot.score - target.score : 0;
 
   return (
-    <div className="hud" aria-live="off">
+    <div className={`hud${snapshot.night ? ' hud--night' : ''}`} aria-live="off">
       <div className="hud-score">
         <div className="hud-score-value">{String(snapshot.score).padStart(7, '0')}</div>
         <div className="hud-accuracy">{snapshot.accuracy.toFixed(2)} %</div>

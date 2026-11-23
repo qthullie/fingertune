@@ -382,6 +382,15 @@ mirror, alternate, and one hand holding a slider while the other taps.
 will say no more about it than that it does not play like them. Pick it and
 find out.
 
+*Constellation* (100 BPM) is built the other way round from the rest: the song
+first, the chart second, like the last level of a rhythm game. Every note you
+hit becomes a star, linked to the one before it, and each figure takes its own
+corner of a night sky; a miss breaks the line, and the final phase lights up
+everything the run drew and ties it together. It has its own generated track
+-- a build-up whose stars go to warp, two beats of silence, a drop -- and the
+sky, the rays and the shockwaves carry that intensity so the notes do not have
+to: they never come closer than 0.9 s apart.
+
 **A run can start at any phase.** Everything before it is dropped and the rest
 slides back to zero, so starting at the last phase is a real run at that
 difficulty rather than a fast-forward.
@@ -435,7 +444,9 @@ propped up on a stand.
 Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
 `duration` for sliders) and phase definitions — in
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
-and `slider()` helpers. Add yours and register it in
+and `slider()` helpers. A map can name its music (`soundtrack`, see
+[`src/lib/soundtracks.ts`](src/lib/soundtracks.ts)), and a phase can play on a
+night sky instead of paper (`sky`, see [`src/render/sky.ts`](src/render/sky.ts)). Add yours and register it in
 [`src/beatmaps/index.ts`](src/beatmaps/index.ts); `npm run build` checks every
 chart before it ships ([`scripts/check-beatmaps.mjs`](scripts/check-beatmaps.mjs)).
 
@@ -582,7 +593,8 @@ src/
   config/settings.ts  every knob, mutable at runtime
   game/               engine (timing windows, score, phases), slider geometry,
                       effects, types
-  render/             view + playfield transforms, renderer (video, targets, skeleton)
+  render/             view + playfield transforms, renderer (video, targets, skeleton),
+                      night skies and constellations
   components/         GameCanvas (loop), Hud, Leaderboard, and the Start,
                       Calibration, Pause, End, Error and Mobile screens
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)

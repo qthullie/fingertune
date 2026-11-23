@@ -42,6 +42,11 @@ export interface BeatmapNote {
    * hand, so two notes meant for different hands are allowed to overlap.
    */
   hand?: 'left' | 'right';
+  /**
+   * On a night sky, starts a new constellation here instead of linking this
+   * star to the one before it (see render/sky.ts). Purely visual.
+   */
+  newFigure?: boolean;
 }
 
 /**
@@ -78,6 +83,27 @@ export interface BeatmapPhase {
    * from the previous phase's value, and touching them restarts the run.
    */
   fire?: number;
+  /** Plays the phase on a night sky instead of paper (see `Sky`). */
+  sky?: Sky;
+}
+
+/**
+ * A night sky behind a phase: stars, light, and the constellations the player's
+ * hits draw. Purely visual -- nothing here changes what is judged or how.
+ */
+export interface Sky {
+  /** Background colour. Consecutive skies cross-fade into each other. */
+  color: string;
+  /**
+   * Stars rushing out from the centre, from 0 (drifting) to 1 (full warp).
+   * Climbs steadily from the previous phase's value across the phase, the
+   * way `fire` does, so a build-up is a phase that ends at 1.
+   */
+  warp?: number;
+  /** How hard the sky breathes on each beat, 0..1. */
+  pulse?: number;
+  /** Light rays turning slowly behind the playfield. */
+  rays?: boolean;
 }
 
 /** The generated soundtracks a beatmap can name (see lib/soundtracks.ts). */
@@ -181,4 +207,6 @@ export interface GameSnapshot {
   phaseEventId: number;
   /** True if the run ended because the player touched a fire zone. */
   failed: boolean;
+  /** The current phase is played on a night sky, so the HUD has to read on dark. */
+  night: boolean;
 }
