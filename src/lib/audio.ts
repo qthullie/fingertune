@@ -25,6 +25,16 @@ const PAD_CHORDS = [
   ['F3', 'A3', 'C4'],
 ] as const;
 
+/**
+ * Eighth notes since the start of the track, at an audio instant.
+ *
+ * Read off the transport rather than counted by the loop, so that moving the
+ * transport (a resume after a rewind) moves the arrangement with it.
+ */
+function eighthAt(time: number): number {
+  return Math.round(Tone.Transport.getTicksAtTime(time) / (Tone.Transport.PPQ / 2));
+}
+
 export class AudioEngine {
   private perfectSynth: Tone.PolySynth<Tone.Synth> | null = null;
   private goodSynth: Tone.PolySynth<Tone.Synth> | null = null;
@@ -46,8 +56,6 @@ export class AudioEngine {
 
   /** Current phase (0..2): drives the arrangement. */
   private intensity = 0;
-  /** Current eighth note since the track started. */
-  private step = 0;
   private initialized = false;
 
   get ready(): boolean {
@@ -177,9 +185,9 @@ export class AudioEngine {
     // which instruments play, so a phase change reshapes the track without
     // interrupting it.
     this.musicPart = new Tone.Loop((time) => {
-      const step = this.step % 8;
-      const bar = Math.floor(this.step / 8) % 2;
-      this.step += 1;
+      const eighth = eighthAt(time);
+      const step = eighth % 8;
+      const bar = Math.floor(eighth / 8) % 2;
 
       // Pad: every 2 bars, present from phase 1.
       if (step === 0) {
@@ -226,7 +234,6 @@ export class AudioEngine {
    */
   startMusic(delay = 0.15): number {
     const startAt = Tone.now() + delay;
-    this.step = 0;
     this.intensity = 0;
 
     Tone.Transport.stop();
@@ -261,9 +268,19 @@ export class AudioEngine {
     Tone.Transport.pause();
   }
 
-  /** Picks the music back up from where it was paused. */
-  resumeMusic(): void {
-    Tone.Transport.start();
+  /**
+   * Picks the music back up at the game time the run resumes from.
+   *
+   * Not where the music was paused: the engine rewinds by RESUME_REWIND on the
+   * way back in, and a track resumed in place would then run that far ahead of
+   * the notes for the rest of the run.
+   *
+   * @param atTime game time the run resumes at, countdown included.
+   */
+  resumeMusic(atTime: number): void {
+    const intoTrack = atTime - settings.COUNTDOWN;
+    // Rewound into the countdown: the track waits until the countdown ends.
+    Tone.Transport.start(Tone.now() + Math.max(0, -intoTrack), Math.max(0, intoTrack));
   }
 
   /** Steps the arrangement up (called on a phase change). */

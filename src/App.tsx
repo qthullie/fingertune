@@ -115,7 +115,7 @@ export function App(): JSX.Element {
         // The soundtrack steps up on every phase.
         onPhaseChange: (index) => audio.setIntensity(index),
         onPause: () => audio.pauseMusic(),
-        onResume: () => audio.resumeMusic(),
+        onResume: (atTime) => audio.resumeMusic(atTime),
         onFinish: () => {
           const final = engine.getSnapshot();
           /* Burned: no score, a moment to read why, then straight back in --
