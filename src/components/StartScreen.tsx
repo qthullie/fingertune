@@ -121,7 +121,6 @@ export function StartScreen({
               </span>
               <span className="card-meta">
                 {meta}
-                {beatmap.notes.some((n) => n.hand) ? ` · ${t('start.card.twoHands')}` : ''}
               </span>
               <span className="card-best">
                 {mapBest

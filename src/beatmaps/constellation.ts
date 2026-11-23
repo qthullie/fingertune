@@ -20,8 +20,8 @@
  *                                  each figure, linked across the whole sky.
  *
  * THE PACE IS SET BY THE HAND, NOT BY THE SONG. A pinch has to close, be seen
- * closing by a ~30 fps webcam, reopen past PINCH_OFF_RATIO, and travel; the
- * Pulse map documents what happens when a chart forgets that. So the drop is
+ * closing by a ~30 fps webcam, reopen past PINCH_OFF_RATIO, and travel (see
+ * scripts/check-beatmaps.mjs for what happens when a chart forgets). So the drop is
  * made intense by everything around the notes -- sky, rays, music -- and the
  * notes themselves never come faster than 0.9 s, and only that fast on hops a
  * third the width of a pentagram. Between a slider's tail and the next head

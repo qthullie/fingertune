@@ -27,9 +27,6 @@ const MARGIN = 0.04;
 
 const MAPS = [
   ['demo', 'demoBeatmap'],
-  ['pulse', 'pulseBeatmap'],
-  ['drift', 'driftBeatmap'],
-  ['duet', 'duetBeatmap'],
   ['chromatic', 'chromaticBeatmap'],
   ['constellation', 'constellationBeatmap'],
 ];
@@ -94,26 +91,14 @@ try {
       }
     }
 
-    /* Notes on separate hands are meant to overlap, so the gap rule is applied
-       per hand. A map with no hand field is single-handed and all its notes
-       land in the same bucket. */
-    const byHand = new Map();
-    for (const note of notes) {
-      const hand = note.hand ?? 'any';
-      if (!byHand.has(hand)) byHand.set(hand, []);
-      byHand.get(hand).push(note);
-    }
-
-    for (const [hand, handNotes] of byHand) {
-      for (let i = 1; i < handNotes.length; i++) {
-        const previous = handNotes[i - 1];
-        const gap = handNotes[i].t - (previous.t + (previous.duration ?? 0));
-        if (gap < MIN_GAP) {
-          fail(
-            `${gap.toFixed(2)}s between notes at t=${handNotes[i].t.toFixed(2)}s ` +
-              `(hand: ${hand}) — below the ${MIN_GAP}s a pinch cycle needs`,
-          );
-        }
+    for (let i = 1; i < notes.length; i++) {
+      const previous = notes[i - 1];
+      const gap = notes[i].t - (previous.t + (previous.duration ?? 0));
+      if (gap < MIN_GAP) {
+        fail(
+          `${gap.toFixed(2)}s between notes at t=${notes[i].t.toFixed(2)}s ` +
+            `— below the ${MIN_GAP}s a pinch cycle needs`,
+        );
       }
     }
 

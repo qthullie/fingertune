@@ -4,30 +4,17 @@ import type { Beatmap } from '../game/types';
 import { chromaticBeatmap } from './chromatic';
 import { constellationBeatmap } from './constellation';
 import { demoBeatmap } from './demo';
-import { driftBeatmap } from './drift';
-import { duetBeatmap } from './duet';
-import { pulseBeatmap } from './pulse';
 
 /**
  * Ordered as a first-time player should meet them.
  *
  * The demo teaches both note kinds at a pace that forgives everything, so it
- * stays first and stays the default. The other two each remove something: Pulse
- * has no sliders and leans entirely on timing, Drift is almost all sliders and
- * leans on holding a pinch steady while the hand travels. Neither is "harder"
- * than the other -- they fail for different reasons, which is the point.
- *
- * Duet is last because it is the only one that needs both hands, which is a
- * coordination problem rather than a harder version of the same one.
- *
- * Constellation closes the list: it asks for nothing the others have not
- * taught, and is built as a finale -- one song, one sky, one figure per phase.
+ * stays first and stays the default. Chromatic adds things to avoid. The
+ * maps after it are built as finales -- one song, one scene each -- and ask
+ * for nothing the first two have not taught.
  */
 export const beatmaps: Beatmap[] = [
   demoBeatmap,
-  pulseBeatmap,
-  driftBeatmap,
-  duetBeatmap,
   chromaticBeatmap,
   constellationBeatmap,
 ];

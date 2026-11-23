@@ -178,8 +178,7 @@ gesture is still visible.
 The pipeline loops over N hands and assigns each detection to a fixed slot from
 its **handedness** label rather than its position in the result array — MediaPipe
 can swap that order between frames, which would hand one hand's filter state to
-the other. `MAX_HANDS` is 2: *Duet* needs both hands, every other chart is
-played with one.
+the other. `MAX_HANDS` is 2, and either hand can take any note.
 
 ### 4. Coordinate spaces
 
@@ -268,7 +267,7 @@ while you pinch is the fastest way to pick your own numbers.
 | `PINCH_COOLDOWN_MS` | `140` | minimum delay between two triggers |
 | `OEF_MIN_CUTOFF` | `1.7` | lower = smoother cursor, more lag |
 | `OEF_BETA` | `0.02` | higher = snappier on fast moves, more jitter |
-| `MAX_HANDS` | `2` | tracked hands (Duet needs both; every other chart is one-handed) |
+| `MAX_HANDS` | `2` | tracked hands; either one can take any note |
 | `MIN_DETECTION_CONF` / `MIN_TRACKING_CONF` | `0.5` | MediaPipe confidence gates |
 | `HAND_LOST_TIMEOUT` | `0.5 s` | grace period before a hand is forgotten |
 | `THREADED_INFERENCE` | `true` | run MediaPipe in a Web Worker (falls back inline on its own) |
@@ -361,24 +360,9 @@ The soundtrack is synthesised by Tone.js on the same transport and grows with
 each phase; misses are audible; the best score per beatmap is kept in
 `localStorage`.
 
-**Four beatmaps**, each built around one idea. *Demo* (120 BPM) teaches both
-note kinds at a pace that forgives everything. *Pulse* (140 BPM) has no sliders
-at all, so nothing asks you to hold a pinch and the notes sit far closer
-together — a map about timing and nothing else. *Drift* (100 BPM) is almost all
-sliders, which is a test of holding a pinch steady while the whole hand travels,
-and that is where the One-Euro filter is least certain. Pulse and Drift are not
-harder than each other; they fail for different reasons.
+*Demo* (120 BPM) teaches both note kinds at a pace that forgives everything.
 
-*Duet* (110 BPM) is played with **both hands**, and nothing in the engine checks
-which hand hit what. The map is split down the middle — left-hand notes never
-leave the left third, right-hand notes the right third — so what makes it
-two-handed is simply that one hand cannot be in both places at once. Enforcing
-the hand in code would be worse than useless: MediaPipe reports handedness from
-a mirrored image and gets it wrong often enough that a correct hit would
-sometimes be judged a miss. Its three phases are three kinds of coordination:
-mirror, alternate, and one hand holding a slider while the other taps.
-
-**And a fifth.** It is on the start screen with the others, and this README
+**And another.** It is on the start screen with the others, and this README
 will say no more about it than that it does not play like them. Pick it and
 find out.
 

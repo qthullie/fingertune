@@ -123,7 +123,7 @@ export interface Settings {
   THREADED_INFERENCE: boolean;
 
   /* ---- Hand tracking ------------------------------------------------------------- */
-  /** Hands tracked. 2 by default, for Duet; the whole pipeline loops over N hands. */
+  /** Hands tracked. Any of them can hit any note; the whole pipeline loops over N hands. */
   MAX_HANDS: number;
   MIN_DETECTION_CONF: number;
   MIN_PRESENCE_CONF: number;
