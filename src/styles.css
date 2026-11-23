@@ -656,16 +656,25 @@ button:disabled {
 
 /*
  * Phases on a night sky (render/sky.ts). Words that stand on the canvas turn
- * light; words that sit on a block of their own -- the banner, a grade, the
- * hot combo -- keep the ink of that block, so a GOOD, which has no colour of
- * its own, gets a paper block to stand on.
+ * light; words that sit on a block of their own -- a grade, the hot combo --
+ * keep the ink of that block, so a GOOD, which has no colour of its own, gets
+ * a paper block to stand on.
+ *
+ * The phase banner loses its block instead. A new phase starts on its first
+ * note, so for its first three seconds an opaque banner sat on the notes the
+ * player had to read; floating words over the sky hide nothing.
  */
-.hud--night :is(.hud-score-value, .hud-combo:not(.hud-combo--hot), .hud-countdown-number, .hud-target-value) {
+.hud--night :is(.hud-score-value, .hud-combo:not(.hud-combo--hot), .hud-countdown-number, .hud-target-value, .hud-phase-name) {
   color: var(--night-ink);
 }
 
-.hud--night :is(.hud-accuracy, .hud-status, .hud-target-label, .hud-grade-offset, .hud-countdown-hint) {
+.hud--night :is(.hud-accuracy, .hud-status, .hud-target-label, .hud-grade-offset, .hud-countdown-hint, .hud-phase-hint) {
   color: var(--night-ink-soft);
+}
+
+.hud--night .hud-phase-banner {
+  background: none;
+  box-shadow: none;
 }
 
 .hud--night .hud-grade-label {

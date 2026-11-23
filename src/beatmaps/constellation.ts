@@ -21,11 +21,17 @@
  *
  * THE PACE IS SET BY THE HAND, NOT BY THE SONG. A pinch has to close, be seen
  * closing by a ~30 fps webcam, reopen past PINCH_OFF_RATIO, and travel (see
- * scripts/check-beatmaps.mjs for what happens when a chart forgets). So the drop is
- * made intense by everything around the notes -- sky, rays, music -- and the
- * notes themselves never come faster than 0.9 s, and only that fast on hops a
- * third the width of a pentagram. Between a slider's tail and the next head
- * there are always at least two beats.
+ * scripts/check-beatmaps.mjs for what happens when a chart forgets). So the
+ * drop is made intense by everything around the notes -- sky, rays, music --
+ * and the notes themselves never come faster than 0.9 s, and only that fast on
+ * hops a third the width of a pentagram. Between a slider's tail and the next
+ * head there are always at least two beats.
+ *
+ * AND THE SKY IS SMALLER THAN THE SCREEN. Everything stays inside x 0.2-0.8,
+ * y 0.26-0.72, the box the demo map keeps to: a pinch near the edge of the
+ * frame puts the rest of the hand outside it, the model loses the hand, and
+ * the run pauses itself. Figures overlap a little as a result; earlier ones
+ * are dimmed by then.
  *
  * Every phase starts on a beat, and four beats after the music does (INTRO),
  * so that starting a run at a later phase keeps the notes on the grid of the
@@ -129,34 +135,34 @@ const DOWN = Math.PI / 2;
  * Where each figure lives. The final phase visits all of them, so they are
  * named once here rather than repeated as numbers.
  */
-const DIPPER = { x: 0.33, y: 0.3 };
-const SPIRAL = { x: 0.74, y: 0.56 };
+const DIPPER = { x: 0.29, y: 0.3 };
+const SPIRAL = { x: 0.66, y: 0.5 };
 const CORE = { x: 0.5, y: 0.48 };
-const SMALL_STAR = { x: 0.2, y: 0.7 };
-const RING = { x: 0.8, y: 0.27 };
+const SMALL_STAR = { x: 0.28, y: 0.6 };
+const RING = { x: 0.69, y: 0.42 };
 
 /* -------------------------------------------------------------------------- */
-/* Dusk: the Dipper, handle first, in the top left. The slider closes the     */
+/* Dusk: the Dipper, handle first, from the top left. The slider closes the   */
 /* bowl, so the last line of the figure is the one the player drags.          */
 /* -------------------------------------------------------------------------- */
 const dusk: BeatmapNote[] = [
   ...chain(
     0,
     [
-      [0.12, 0.16],
-      [0.2, 0.2],
-      [0.28, 0.25],
-      [0.36, 0.3],
-      [0.37, 0.44],
-      [0.52, 0.45],
+      [0.2, 0.27],
+      [DIPPER.x, DIPPER.y],
+      [0.38, 0.34],
+      [0.47, 0.38],
+      [0.46, 0.56],
+      [0.6, 0.58],
     ],
     3,
   ),
   slider(
     18,
     [
-      [0.54, 0.31],
-      [0.36, 0.3],
+      [0.62, 0.4],
+      [0.47, 0.38],
     ],
     2,
   ),
@@ -167,12 +173,12 @@ const dusk: BeatmapNote[] = [
 /* shooting star along the bottom and a single star where the drop will hit.  */
 /* -------------------------------------------------------------------------- */
 const rise: BeatmapNote[] = [
-  ...chain(24, spiral(SPIRAL.x, SPIRAL.y, 8, 0.15, 0.04, Math.PI, (4 * Math.PI) / 9), 2),
+  ...chain(24, spiral(SPIRAL.x, SPIRAL.y, 8, 0.13, 0.07, Math.PI, (4 * Math.PI) / 9), 2),
   slider(
     40,
     [
-      [0.62, 0.84],
-      [0.3, 0.64],
+      [0.62, 0.72],
+      [0.36, 0.62],
     ],
     2,
   ),
@@ -186,16 +192,16 @@ const rise: BeatmapNote[] = [
 /* is a figure of its own, and each slider is the breath between two.         */
 /* -------------------------------------------------------------------------- */
 const supernova: BeatmapNote[] = [
-  ...chain(48, pentagram(CORE.x, CORE.y, 0.16, UP), 2),
+  ...chain(48, pentagram(CORE.x, CORE.y, 0.13, UP), 2),
   // The halo, right to left over the top of the star.
-  { ...slider(60, arc(CORE.x, CORE.y, 0.22, 2 * Math.PI, Math.PI, 8), 4), newFigure: true },
-  ...figure(chain(66, pentagram(SMALL_STAR.x, SMALL_STAR.y, 0.09, DOWN), 1.5)),
+  { ...slider(60, arc(CORE.x, CORE.y, 0.145, 2 * Math.PI, Math.PI, 8), 4), newFigure: true },
+  ...figure(chain(66, pentagram(SMALL_STAR.x, SMALL_STAR.y, 0.075, DOWN), 1.5)),
   {
     ...slider(
       76,
       [
-        [0.3, 0.8],
-        [0.68, 0.32],
+        [0.34, 0.72],
+        [0.66, 0.32],
       ],
       2,
     ),
@@ -211,7 +217,7 @@ const supernova: BeatmapNote[] = [
 /* ending on the core.                                                         */
 /* -------------------------------------------------------------------------- */
 const afterglow: BeatmapNote[] = [
-  slider(96, arc(0.76, 0.66, 0.1, -0.55 * Math.PI, 0.55 * Math.PI, 10), 6),
+  slider(96, arc(0.72, 0.6, 0.06, -0.55 * Math.PI, 0.55 * Math.PI, 10), 6),
   ...figure(
     chain(
       106,
