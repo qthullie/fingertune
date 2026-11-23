@@ -567,6 +567,7 @@ src/
     handTracking.ts   MediaPipe, landmark smoothing, pinch state machine, hand slots
     oneEuro.ts        One-Euro filter
     audio.ts          Tone.js: reference clock, generated soundtrack, hit/miss sounds
+    soundtracks.ts    what the generated band plays, one arrangement per track
     handWorker.ts     MediaPipe in a Web Worker, off the render thread
     calibration.ts    measuring a player's pinch range, and keeping it
     highscores.ts     localStorage best scores

@@ -8,6 +8,7 @@ import { PauseScreen } from './components/PauseScreen';
 import { GameEngine } from './game/engine';
 import { HandTracker, type LoadingStep } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
+import { soundtracks } from './lib/soundtracks';
 import { explainError, type FriendlyError } from './lib/errors';
 import { needsADesk } from './lib/device';
 import { loadHideVideo, saveHideVideo } from './lib/preferences';
@@ -112,8 +113,6 @@ export function App(): JSX.Element {
         onHitSound: (grade, combo) => audio.playHit(grade, combo),
         onMissSound: (brokeCombo) => audio.playMiss(brokeCombo),
         onSliderTick: () => audio.playSliderTick(),
-        // The soundtrack steps up on every phase.
-        onPhaseChange: (index) => audio.setIntensity(index),
         onPause: () => audio.pauseMusic(),
         onResume: (atTime) => audio.resumeMusic(atTime),
         onFinish: () => {
@@ -142,9 +141,14 @@ export function App(): JSX.Element {
     setRecord(null);
     tracker.resetHands();
     const map = beatmapRef.current;
-    audio.setBpm(map.bpm);
+    // Seconds cut from the front of the map when starting at a later phase.
+    const skip = map.phases[phaseRef.current]?.start ?? 0;
     // The music defines t=0, so notes land on the musical grid.
-    const startAt = audio.startMusic();
+    const startAt = audio.startMusic({
+      bpm: map.bpm,
+      soundtrack: soundtracks[map.soundtrack ?? 'groove'],
+      sections: map.phases.map((phase) => phase.start - skip),
+    });
     engine.start(map, startAt, phaseRef.current);
     setUiPhase('playing');
   }, []);

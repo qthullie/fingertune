@@ -80,11 +80,16 @@ export interface BeatmapPhase {
   fire?: number;
 }
 
+/** The generated soundtracks a beatmap can name (see lib/soundtracks.ts). */
+export type SoundtrackId = 'groove' | 'constellation';
+
 export interface Beatmap {
   id: string;
   title: string;
   author: string;
   bpm: number;
+  /** Which generated track plays under the map. Defaults to 'groove'. */
+  soundtrack?: SoundtrackId;
   /** Sorted by ascending `start`. The first one must start at 0. */
   phases: BeatmapPhase[];
   notes: BeatmapNote[];

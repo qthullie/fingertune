@@ -51,8 +51,6 @@ export class GameEngine {
   private phaseEventId = 0;
   /** Phases shifted by the countdown, ready to compare against `time`. */
   private phases: BeatmapPhase[] = [];
-  /** Index, in the beatmap's own phase list, that this run started from. */
-  private startPhase = 0;
   private lastBeat = -1;
   private _bgHueOffset = 0;
   private _failed = false;
@@ -62,7 +60,6 @@ export class GameEngine {
   private onHitSound: ((grade: Exclude<Grade, 'MISS'>, combo: number) => void) | null = null;
   private onMissSound: ((brokeCombo: boolean) => void) | null = null;
   private onSliderTick: (() => void) | null = null;
-  private onPhaseChange: ((index: number, phase: BeatmapPhase | undefined) => void) | null = null;
   private onFinish: (() => void) | null = null;
   private onPause: (() => void) | null = null;
   private onResume: ((atTime: number) => void) | null = null;
@@ -115,13 +112,12 @@ export class GameEngine {
 
   /* ------------------------------------------------------------------ wiring */
 
-  /** Wires the audio clock and the sound / phase / finish callbacks. */
+  /** Wires the audio clock and the sound / finish callbacks. */
   configure(options: {
     clock: () => number;
     onHitSound: (grade: Exclude<Grade, 'MISS'>, combo: number) => void;
     onMissSound: (brokeCombo: boolean) => void;
     onSliderTick: () => void;
-    onPhaseChange: (index: number, phase: BeatmapPhase | undefined) => void;
     onFinish: () => void;
     onPause?: () => void;
     /** @param atTime the game time the run resumes at, rewind included. */
@@ -131,7 +127,6 @@ export class GameEngine {
     this.onHitSound = options.onHitSound;
     this.onMissSound = options.onMissSound;
     this.onSliderTick = options.onSliderTick;
-    this.onPhaseChange = options.onPhaseChange;
     this.onFinish = options.onFinish;
     this.onPause = options.onPause ?? null;
     this.onResume = options.onResume ?? null;
@@ -166,7 +161,6 @@ export class GameEngine {
     const index = Math.max(0, Math.min(fromPhase, sorted.length - 1));
     // Seconds cut from the front of the map.
     const skip = sorted[index]?.start ?? 0;
-    this.startPhase = index;
 
     // Phases are shifted by the countdown, exactly like the notes.
     this.phases = sorted
@@ -233,7 +227,6 @@ export class GameEngine {
     this._failed = false;
     this.t0 = startAt ?? this.clock();
     this.publish();
-    this.onPhaseChange?.(this.startPhase, this.phases[0]);
   }
 
   /** Index of the phase active at game time `t` (countdown included). */
@@ -427,13 +420,13 @@ export class GameEngine {
       }
     }
 
-    // Phase change: banner plus a step up in musical intensity.
+    // Phase change: banner and flash. The music switches on its own grid
+    // (see AudioEngine.startMusic), not here a frame late.
     const phaseIndex = this.phaseIndexAt(this.time);
     if (phaseIndex !== this.phaseIndex) {
       this.phaseIndex = phaseIndex;
       this.phaseEventId += 1;
       this.snapshotDirty = true;
-      this.onPhaseChange?.(this.startPhase + phaseIndex, this.phases[phaseIndex]);
       const newPhase = this.phases[phaseIndex];
       if (newPhase?.color) {
         this.effects.flash(newPhase.color, 0.45);
