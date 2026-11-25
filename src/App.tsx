@@ -147,6 +147,8 @@ export function App(): JSX.Element {
     setError(null);
     try {
       await audio.init();
+      // A map with recorded sounds must not start before they can play.
+      await audio.prepare(soundtracks[beatmapRef.current.soundtrack ?? 'groove']);
       // Immediate blip: if you cannot hear it, the problem is the audio output
       // (muted tab, system volume), not the game.
       audio.playTestBlip();
@@ -254,6 +256,8 @@ export function App(): JSX.Element {
             setBeatmap(next);
             setStartPhase(0);
             setBest(loadBest(next.id));
+            // Back from a run, Play skips the loading; R skips everything.
+            if (audio.ready) void audio.prepare(soundtracks[next.soundtrack ?? 'groove']);
           }}
           startPhase={startPhase}
           onSelectPhase={setStartPhase}

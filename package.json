@@ -36,7 +36,8 @@
     "typecheck": "tsc --noEmit",
     "fetch:model": "node scripts/fetch-model.mjs",
     "check:beatmaps": "node scripts/check-beatmaps.mjs",
-    "build:og": "node scripts/make-og.mjs"
+    "build:og": "node scripts/make-og.mjs",
+    "build:sounds": "node scripts/make-sounds.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.14",

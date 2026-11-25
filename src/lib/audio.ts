@@ -14,6 +14,7 @@
 import * as Tone from 'tone';
 import { settings } from '../config/settings';
 import type { Grade } from '../game/types';
+import { SampleDeck } from './sampleDeck';
 import { soundtracks, type Band, type Soundtrack } from './soundtracks';
 
 /** What a run's music needs to know about its beatmap. */
@@ -55,6 +56,9 @@ export class AudioEngine {
   private master: Tone.Limiter | null = null;
   private musicBus: Tone.Gain | null = null;
   private effectsBus: Tone.Gain | null = null;
+
+  /* Recorded sounds, loaded on demand, one deck per soundtrack that has some. */
+  private readonly decks = new Map<Soundtrack, Promise<SampleDeck>>();
 
   /* Instruments of the generated track. */
   private band: Band | null = null;
@@ -219,7 +223,7 @@ export class AudioEngine {
     pad.connect(reverb);
     pad.volume.value = -22;
 
-    this.band = { kick, snare, hat, crash, bass, lead, bell, pad };
+    this.band = { kick, snare, hat, crash, bass, lead, bell, pad, deck: null };
 
     // One eighth note at a time. The soundtrack is told which phase the eighth
     // falls in, so a phase change reshapes the track on the beat it starts on.
@@ -234,6 +238,25 @@ export class AudioEngine {
         sinceSection: eighth - (this.sectionStarts[section] ?? 0),
       });
     }, '8n');
+  }
+
+  /**
+   * Loads the recorded sounds a soundtrack needs, once, so its first run does
+   * not start silent. Safe to call again: later calls wait for the first.
+   */
+  async prepare(soundtrack: Soundtrack): Promise<void> {
+    if (!soundtrack.samples || !this.musicBus) return;
+    let deck = this.decks.get(soundtrack);
+    if (!deck) {
+      deck = SampleDeck.load(soundtrack.samples, this.musicBus);
+      this.decks.set(soundtrack, deck);
+    }
+    await deck;
+  }
+
+  /** The current run's recorded sounds, if its soundtrack has any and they are loaded. */
+  private get deck(): SampleDeck | null {
+    return this.band?.deck ?? null;
   }
 
   /** Index of the section an eighth note falls in. */
@@ -258,6 +281,10 @@ export class AudioEngine {
     const startAt = Tone.now() + delay;
     Tone.Transport.bpm.value = plan.bpm;
     this.soundtrack = plan.soundtrack;
+    if (this.band) this.band.deck = null;
+    void this.decks.get(plan.soundtrack)?.then((deck) => {
+      if (this.band && this.soundtrack === plan.soundtrack) this.band.deck = deck;
+    });
     this.musicBus?.gain.setValueAtTime(Tone.dbToGain(plan.soundtrack.levels.music), startAt);
     this.effectsBus?.gain.setValueAtTime(Tone.dbToGain(plan.soundtrack.levels.effects), startAt);
     /* Sections are laid on the music's own grid up front, rather than switched
@@ -321,6 +348,15 @@ export class AudioEngine {
     if (!this.initialized) return;
     const scale = this.soundtrack.hitScale;
     const note = scale[Math.min(combo, scale.length - 1)] ?? 'C5';
+    const recorded = this.soundtrack.hitInstrument;
+    if (recorded && this.deck) {
+      // On the game's own bus, like the synthesised pings it replaces.
+      this.deck.playNote(recorded.name, recorded.root, note, Tone.now(), {
+        volume: grade === 'PERFECT' ? 0 : -6,
+        output: this.effectsBus ?? undefined,
+      });
+      return;
+    }
     if (grade === 'PERFECT') this.perfectSynth?.triggerAttackRelease([note, 'G6'], '32n');
     else this.goodSynth?.triggerAttackRelease(note, '32n');
   }
@@ -365,6 +401,8 @@ export class AudioEngine {
     ]) {
       node?.dispose();
     }
+    for (const deck of this.decks.values()) void deck.then((loaded) => loaded.dispose());
+    this.decks.clear();
     this.initialized = false;
   }
 }

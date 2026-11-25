@@ -15,6 +15,7 @@
 
 import * as Tone from 'tone';
 import type { SoundtrackId } from '../game/types';
+import type { SampleDeck } from './sampleDeck';
 
 /** Every instrument a track can play. Built and routed by the AudioEngine. */
 export interface Band {
@@ -26,6 +27,8 @@ export interface Band {
   lead: Tone.PolySynth<Tone.Synth>;
   bell: Tone.PolySynth<Tone.FMSynth>;
   pad: Tone.PolySynth<Tone.Synth>;
+  /** The track's recorded sounds, once loaded (see `Soundtrack.samples`). */
+  deck: SampleDeck | null;
 }
 
 /** Where an eighth note falls. */
@@ -54,6 +57,13 @@ export interface Soundtrack {
    * point.
    */
   levels: { music: number; effects: number };
+  /** Recorded sounds to load before the track can play, by name. */
+  samples?: Readonly<Record<string, string>>;
+  /**
+   * A recorded instrument (one of `samples`) to play hits on instead of the
+   * synthesised ping, and the note it is tuned to.
+   */
+  hitInstrument?: { name: string; root: string };
 }
 
 /** Shifts a note by whole octaves. */
