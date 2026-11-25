@@ -309,7 +309,6 @@ export function drawConstellations(
   let layer = null as Layer | null;
   let previous: Target | null = null;
   for (const target of engine.targets) {
-    if (target.kind === 'hazard') continue;
     // Targets are sorted by time, so phases arrive in order.
     if (target.phaseIndex > current) break;
     const before = previous;

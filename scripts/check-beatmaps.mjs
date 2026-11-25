@@ -27,7 +27,6 @@ const MARGIN = 0.04;
 
 const MAPS = [
   ['demo', 'demoBeatmap'],
-  ['chromatic', 'chromaticBeatmap'],
   ['constellation', 'constellationBeatmap'],
 ];
 

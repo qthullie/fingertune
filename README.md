@@ -362,10 +362,6 @@ each phase; misses are audible; the best score per beatmap is kept in
 
 *Demo* (120 BPM) teaches both note kinds at a pace that forgives everything.
 
-**And another.** It is on the start screen with the others, and this README
-will say no more about it than that it does not play like them. Pick it and
-find out.
-
 *Constellation* (100 BPM) is built the other way round from the rest: the song
 first, the chart second, like the last level of a rhythm game. Every note you
 hit becomes a star, linked to the one before it, and each figure takes its own
@@ -582,7 +578,6 @@ src/
   components/         GameCanvas (loop), Hud, Leaderboard, and the Start,
                       Calibration, Pause, End, Error and Mobile screens
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
-  assets/             a looping backdrop video, rendered by a script below
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
 supabase/
@@ -593,7 +588,6 @@ scripts/
   check-beatmaps.mjs  every chart validated before a build ships it
   fetch-model.mjs     the hand model, for running fully offline
   make-og.mjs         draws public/og-card.png, the link-preview card
-  make-psychedelic-video.mjs  renders that backdrop with ffmpeg
   fonts/              Inter, for the card only (OFL, see scripts/fonts)
 ```
 

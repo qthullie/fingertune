@@ -10,7 +10,7 @@ export type GamePhase = 'idle' | 'playing' | 'paused' | 'finished';
  *  - `slider`: pinch on the head, then HOLD the pinch and follow the ball along
  *    the path, in the direction it travels, until the end.
  */
-export type NoteKind = 'circle' | 'slider' | 'hazard';
+export type NoteKind = 'circle' | 'slider';
 
 /** A beatmap note. x and y are normalised 0..1 inside the playfield. */
 export interface BeatmapNote {
@@ -60,17 +60,6 @@ export interface BeatmapPhase {
   targetScale: number;
   /** Optional CSS colour for this phase's note disc. Defaults to PALETTE.cyan. */
   color?: string;
-  /**
-   * Plays the phase over the looping psychedelic video, whose colours jump on
-   * every hit. A map with any such phase also turns the interface rainbow.
-   */
-  psychedelic?: boolean;
-  /**
-   * Flame walls closing in from both sides: how far each one reaches by the end
-   * of the phase, as a fraction of the camera area's width. They grow steadily
-   * from the previous phase's value, and touching them restarts the run.
-   */
-  fire?: number;
   /** Plays the phase on a night sky instead of paper (see `Sky`). */
   sky?: Sky;
 }
@@ -84,8 +73,8 @@ export interface Sky {
   color: string;
   /**
    * Stars rushing out from the centre, from 0 (drifting) to 1 (full warp).
-   * Climbs steadily from the previous phase's value across the phase, the
-   * way `fire` does, so a build-up is a phase that ends at 1.
+   * Climbs steadily from the previous phase's value across the phase, so a
+   * build-up is a phase that ends at 1.
    */
   warp?: number;
   /** How hard the sky breathes on each beat, 0..1. */
@@ -193,8 +182,6 @@ export interface GameSnapshot {
   phaseHint: string;
   /** Increments on every phase change: used as a `key` for the banner. */
   phaseEventId: number;
-  /** True if the run ended because the player touched a fire zone. */
-  failed: boolean;
   /** The current phase is played on a night sky, so the HUD has to read on dark. */
   night: boolean;
 }

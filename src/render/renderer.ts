@@ -24,14 +24,13 @@
  * than straight from PALETTE.
  */
 
-import psychedelicUrl from '../assets/psychedelic.mp4';
 import { PALETTE, settings } from '../config/settings';
 import type { GameEngine } from '../game/engine';
 import { directionAt, pointAt, sliderProgress } from '../game/slider';
 import type { Target } from '../game/types';
 import { HAND_CONNECTIONS, LANDMARK_COUNT, type HandState } from '../lib/handTracking';
 import { NIGHT_INK, drawConstellations, drawGlow, drawSky, skyColor } from './sky';
-import { fireEdges, radiusPx, toScreen, type Playfield, type View } from './view';
+import { radiusPx, toScreen, type Playfield, type View } from './view';
 
 export interface RenderInput {
   ctx: CanvasRenderingContext2D;
@@ -121,9 +120,7 @@ export function renderFrame(input: RenderInput): void {
     drawSky({ ctx: frame.ctx, width: frame.width, height: frame.height, engine: frame.engine, u: unit() });
     drawConstellations(frame.ctx, frame.playfield, frame.engine, unit());
   }
-  drawPsychedelic(frame);
   if (settings.SHOW_PLAYFIELD) drawPlayfield(frame);
-  drawFireWalls(frame);
   drawTargets(frame);
   drawEffects(frame);
   drawHands(frame);
@@ -164,44 +161,6 @@ function drawBackground({ ctx, width, height, view, video, ink }: Frame): void {
   });
 }
 
-/** How much of the psychedelic video shows through: a tint, not a wall. */
-const PSYCHEDELIC_ALPHA = 0.2;
-
-let psychedelicVideo: HTMLVideoElement | null = null;
-
-/**
- * Psychedelic phases: the looping rainbow tunnel (scripts/make-psychedelic-video.mjs)
- * over the whole canvas, faint enough that the notes stay the thing to read.
- * Every hit turns its hue. The element is made on first use and paused while
- * no such phase plays.
- */
-function drawPsychedelic({ ctx, width, height, engine }: RenderInput): void {
-  if (!engine.currentPhase?.psychedelic) {
-    if (psychedelicVideo && !psychedelicVideo.paused) psychedelicVideo.pause();
-    return;
-  }
-  if (!psychedelicVideo) {
-    psychedelicVideo = document.createElement('video');
-    psychedelicVideo.src = psychedelicUrl;
-    psychedelicVideo.muted = true;
-    psychedelicVideo.loop = true;
-    psychedelicVideo.playsInline = true;
-  }
-  const clip = psychedelicVideo;
-  if (clip.paused) void clip.play().catch(() => undefined);
-  if (clip.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
-
-  // Cover the canvas, cropping whichever side overflows.
-  const scale = Math.max(width / clip.videoWidth, height / clip.videoHeight);
-  const w = clip.videoWidth * scale;
-  const h = clip.videoHeight * scale;
-  ctx.save();
-  ctx.globalAlpha = PSYCHEDELIC_ALPHA;
-  ctx.filter = `hue-rotate(${Math.round(engine.bgHueOffset % 360)}deg)`;
-  ctx.drawImage(clip, (width - w) / 2, (height - h) / 2, w, h);
-  ctx.restore();
-}
-
 /** Debug outline of the area targets can occupy. */
 function drawPlayfield({ ctx, playfield, ink }: Frame): void {
   const stroke = strokes();
@@ -211,100 +170,6 @@ function drawPlayfield({ ctx, playfield, ink }: Frame): void {
   ctx.setLineDash([6, 6]);
   ctx.strokeRect(playfield.x, playfield.y, playfield.width, playfield.height);
   ctx.restore();
-}
-
-/* --------------------------------------------------------------- fire walls --- */
-
-/**
- * One flame tongue licking towards the centre, in three frames. One character
- * per pixel: o orange, y yellow, w white-hot, r red tip, '.' empty.
- */
-const FLAME_FRAMES = [
-  ['oor.......', 'ooyor.....', 'oyyyoorr..', 'oywwyyoorr', 'oyyyyoor..', 'ooyoor....', 'oor.......'],
-  ['oorrr.....', 'ooyyoorr..', 'oyywyoorr.', 'oywwyor...', 'oyyor.....', 'ooor......', 'oor.......'],
-  ['oor.......', 'ooor......', 'oyyor.....', 'oywwyor...', 'oyywyoorr.', 'ooyyoorr..', 'oorrr.....'],
-] as const;
-
-/** Painted in this order: the base before the embers on it. */
-const FLAME_COLORS = new Map([
-  ['r', '#E4252F'],
-  ['o', '#FF7A00'],
-  ['y', '#FFD23F'],
-  ['w', '#FFF6C8'],
-]);
-
-/**
- * Flame walls closing in from both sides: a burning base with pixel-art tongues
- * climbing its inner edge, tips exactly on the line that burns.
- *
- * The tint behind covers the whole burning area, so the gap between two
- * flickering tongues never reads as a safe spot.
- */
-function drawFireWalls({ ctx, width, height, playfield, engine }: RenderInput): void {
-  const margin = engine.fireZoneMargin;
-  if (margin <= 0) return;
-  const edges = fireEdges(playfield, margin);
-  const px = Math.max(3, Math.round(height / 140));
-  const rows = FLAME_FRAMES[0].length;
-  const length = FLAME_FRAMES[0][0].length * px;
-  const period = rows * px;
-  const t = performance.now() / 1000;
-  const tick = Math.floor(t * 10);
-  // Whole pixels only, or the sprite smears.
-  const climbed = t * 40;
-  const climb = Math.round(climbed % period);
-  const passed = Math.floor(climbed / period);
-
-  const walls = [
-    [edges.left, false],
-    [width - edges.right, true],
-  ] as const;
-
-  for (const [depth, mirrored] of walls) {
-    ctx.save();
-    if (mirrored) {
-      ctx.translate(width, 0);
-      ctx.scale(-1, 1);
-    }
-
-    withAlpha(ctx, 0.3, () => {
-      ctx.fillStyle = '#FF7A00';
-      ctx.fillRect(0, 0, depth, height);
-    });
-
-    const paths = new Map<string, Path2D>();
-    for (const key of FLAME_COLORS.keys()) paths.set(key, new Path2D());
-
-    const x0 = Math.round(depth - length);
-    if (x0 > 0) {
-      paths.get('o')?.rect(0, 0, x0, height);
-      // Embers: a cheap hash per cell, reshuffled ten times a second.
-      for (let c = 0; c * px < x0; c++) {
-        for (let r = 0; r * px < height; r++) {
-          const h = Math.imul(c + 1, 73856093) ^ Math.imul(r + 1, 19349663) ^ Math.imul(tick, 83492791);
-          if (h % 7 === 0) paths.get('y')?.rect(c * px, r * px, px, px);
-        }
-      }
-    }
-
-    // Each tongue keeps its own flicker as it climbs, hence `passed`.
-    for (let i = 0, top = -climb; top < height; i++, top += period) {
-      const frame = FLAME_FRAMES[(tick + (i + passed) * 2) % FLAME_FRAMES.length]!;
-      frame.forEach((row, r) => {
-        for (let c = 0; c < row.length; c++) {
-          paths.get(row.charAt(c))?.rect(x0 + c * px, top + r * px, px, px);
-        }
-      });
-    }
-
-    for (const [key, color] of FLAME_COLORS) {
-      const path = paths.get(key);
-      if (!path) continue;
-      ctx.fillStyle = color;
-      ctx.fill(path);
-    }
-    ctx.restore();
-  }
 }
 
 /* ---------------------------------------------------------------- targets ---- */
@@ -427,53 +292,6 @@ function drawSlider(
   ctx.restore();
 }
 
-function drawHazard(
-  ctx: CanvasRenderingContext2D,
-  cx: number,
-  cy: number,
-  r: number,
-  strokeW: number,
-  alpha: number,
-): void {
-  ctx.save();
-  ctx.globalAlpha *= alpha;
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = '#ff2200';
-  ctx.globalAlpha *= 0.18;
-  ctx.fill();
-  ctx.globalAlpha /= 0.18;
-
-  ctx.strokeStyle = '#ff3300';
-  const segs = 5;
-  for (let i = 0; i < segs; i++) {
-    const start = (i / segs) * Math.PI * 2 + 0.12;
-    const end = ((i + 0.72) / segs) * Math.PI * 2 - 0.12;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, start, end);
-    ctx.lineWidth = strokeW * 1.5;
-    ctx.stroke();
-    const mid = (start + end) / 2;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(mid) * r, cy + Math.sin(mid) * r);
-    ctx.lineTo(cx + Math.cos(mid) * (r + r * 0.22), cy + Math.sin(mid) * (r + r * 0.22));
-    ctx.lineWidth = strokeW * 0.6;
-    ctx.stroke();
-  }
-
-  const xr = r * 0.35;
-  ctx.strokeStyle = '#ff3300';
-  ctx.lineWidth = strokeW * 1.4;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - xr, cy - xr); ctx.lineTo(cx + xr, cy + xr);
-  ctx.moveTo(cx + xr, cy - xr); ctx.lineTo(cx - xr, cy + xr);
-  ctx.stroke();
-
-  ctx.restore();
-}
-
 function drawTargets({ ctx, playfield, engine, ink }: Frame): void {
   const now = engine.time;
   const stroke = strokes();
@@ -494,24 +312,6 @@ function drawTargets({ ctx, playfield, engine, ink }: Frame): void {
 
     ctx.save();
     ctx.globalAlpha = alpha;
-
-    // Hazard circle: draw warning visual + red approach ring, then skip normal drawing.
-    if (target.kind === 'hazard') {
-      drawHazard(ctx, p.x, p.y, rTarget, stroke.bold, inPerfect ? 1.0 : 0.7);
-      if (progress <= 1.05) {
-        const k = Math.min(progress, 1);
-        const rApproach = rTarget * (settings.APPROACH_START - (settings.APPROACH_START - 1) * k);
-        withAlpha(ctx, 0.4 + 0.6 * k, () => {
-          ctx.lineWidth = stroke.bold;
-          ctx.strokeStyle = '#ff3300';
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, rApproach, 0, Math.PI * 2);
-          ctx.stroke();
-        });
-      }
-      ctx.restore();
-      continue;
-    }
 
     // Slider body first: the head is drawn on top of it.
     if (target.kind === 'slider') drawSlider(ctx, playfield, target, now, rTarget, ink);
