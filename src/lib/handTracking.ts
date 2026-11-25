@@ -11,7 +11,7 @@
  */
 
 import { FilesetResolver, HandLandmarker, type NormalizedLandmark } from '@mediapipe/tasks-vision';
-import { Point2DFilter } from './oneEuro';
+import { Point2DFilter, project } from './oneEuro';
 import { assets, settings } from '../config/settings';
 import type { Vec2 } from '../game/types';
 import type { WorkerFrame, WorkerInit, WorkerResponse } from './handWorker';
@@ -61,6 +61,12 @@ export const HAND_CONNECTIONS: ReadonlyArray<readonly [number, number]> = [
   [19, 20],
 ];
 
+/**
+ * Longest a hand is carried forward without a new detection, in seconds.
+ * Two webcam frames at 30 fps, with room for one late inference.
+ */
+const MAX_COAST = 0.1;
+
 /** Left / right hand as reported by MediaPipe. */
 export type Handedness = 'Left' | 'Right';
 
@@ -84,6 +90,11 @@ export class HandState {
   visible = false;
   /** Left / right per MediaPipe (used to keep a stable slot). */
   handedness: Handedness | null = null;
+
+  /** The smoothed landmarks as of the last detection, before any projection. */
+  private smoothed: Vec2[] = [];
+  /** Their filtered velocities, in image units per second. */
+  private velocities: Vec2[] = [];
 
   /** One 2D One-Euro filter per landmark: the whole skeleton is smoothed. */
   private readonly filters: Point2DFilter[] = Array.from(
@@ -109,26 +120,25 @@ export class HandState {
     // The video is displayed mirrored (otherwise the game is unplayable), so the
     // landmarks are mirrored too and everything downstream shares one space.
     const smoothed: Vec2[] = [];
+    const velocities: Vec2[] = [];
     for (let i = 0; i < LANDMARK_COUNT; i++) {
       const raw = landmarks[i];
       const filter = this.filters[i];
       if (!raw || !filter) return;
-      smoothed.push(
-        filter.filter(1 - raw.x, raw.y, tSec, settings.PREDICT_AHEAD, settings.PREDICT_MAX_STEP),
-      );
+      smoothed.push(filter.filter(1 - raw.x, raw.y, tSec));
+      velocities.push(filter.velocity);
     }
 
-    const thumb = smoothed[LM.THUMB_TIP];
-    const index = smoothed[LM.INDEX_TIP];
-    const wrist = smoothed[LM.WRIST];
-    const middle = smoothed[LM.MIDDLE_MCP];
-    if (!thumb || !index || !wrist || !middle) return;
-
-    this.landmarks = smoothed;
+    this.smoothed = smoothed;
+    this.velocities = velocities;
     this.handedness = handedness;
-    this.thumb = thumb;
-    this.index = index;
-    this.pinchPos = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2 };
+    this.place(settings.PREDICT_AHEAD);
+
+    const thumb = this.landmarks[LM.THUMB_TIP];
+    const index = this.landmarks[LM.INDEX_TIP];
+    const wrist = this.landmarks[LM.WRIST];
+    const middle = this.landmarks[LM.MIDDLE_MCP];
+    if (!thumb || !index || !wrist || !middle) return;
 
     // Normalising by hand size (wrist -> middle-finger base) makes the threshold
     // independent of the distance to the webcam.
@@ -152,6 +162,43 @@ export class HandState {
     this.visible = true;
   }
 
+  /**
+   * Moves the hand on between two detections.
+   *
+   * The webcam delivers ~30 frames a second and the loop draws 60, so on every
+   * other frame there is nothing new to show: the cursor and the skeleton held
+   * still, then jumped. That judder is the hand, the one thing the player
+   * watches all the time. Carrying every landmark along its filtered velocity
+   * for the time elapsed since the last detection turns the steps into motion.
+   *
+   * It is the same projection PREDICT_AHEAD already makes, only longer, under
+   * the same PREDICT_MAX_STEP ceiling, so a reversal costs no more than it did.
+   * And it coasts for MAX_COAST at most: a stalled pipeline freezes the hand
+   * rather than sending it off along its last heading.
+   *
+   * Only positions move. The pinch is decided on detections alone, so nothing
+   * here can fire or release one.
+   */
+  advance(tSec: number): void {
+    if (!settings.EXTRAPOLATE_BETWEEN_FRAMES || !this.visible) return;
+    const elapsed = Math.min(Math.max(tSec - this.lastSeen, 0), MAX_COAST);
+    this.place(settings.PREDICT_AHEAD + elapsed);
+  }
+
+  /** Lays the landmarks and the cursor out `seconds` ahead of the last detection. */
+  private place(seconds: number): void {
+    if (this.smoothed.length < LANDMARK_COUNT) return;
+    this.landmarks = this.smoothed.map((point, i) =>
+      project(point, this.velocities[i] ?? { x: 0, y: 0 }, seconds, settings.PREDICT_MAX_STEP),
+    );
+    const thumb = this.landmarks[LM.THUMB_TIP];
+    const index = this.landmarks[LM.INDEX_TIP];
+    if (!thumb || !index) return;
+    this.thumb = thumb;
+    this.index = index;
+    this.pinchPos = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2 };
+  }
+
   /** Hand absent from this frame: kept briefly, then forgotten. */
   markMissing(tSec: number): void {
     this.justPinched = false;
@@ -159,6 +206,8 @@ export class HandState {
       this.visible = false;
       this.pinching = false;
       this.landmarks = [];
+      this.smoothed = [];
+      this.velocities = [];
       this.handedness = null;
     }
   }
@@ -166,6 +215,8 @@ export class HandState {
   reset(): void {
     for (const filter of this.filters) filter.reset();
     this.landmarks = [];
+    this.smoothed = [];
+    this.velocities = [];
     this.handedness = null;
     this.pinching = false;
     this.justPinched = false;
@@ -388,6 +439,7 @@ export class HandTracker {
       this.latest = null;
       this.applyDetection(landmarks, handedness, tSec, nowMs);
     }
+    for (const hand of this.hands) hand.advance(tSec);
 
     // 2. A new camera frame, if there is one and the pipeline is free.
     if (video.currentTime === this.lastVideoTime) return;

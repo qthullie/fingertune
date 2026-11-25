@@ -27,3 +27,6 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Staging directory for scripts/make-sounds.mjs, removed on its way out.
+.sounds-build/

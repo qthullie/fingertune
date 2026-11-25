@@ -10,7 +10,7 @@ export type GamePhase = 'idle' | 'playing' | 'paused' | 'finished';
  *  - `slider`: pinch on the head, then HOLD the pinch and follow the ball along
  *    the path, in the direction it travels, until the end.
  */
-export type NoteKind = 'circle' | 'slider' | 'hazard';
+export type NoteKind = 'circle' | 'slider';
 
 /** A beatmap note. x and y are normalised 0..1 inside the playfield. */
 export interface BeatmapNote {
@@ -31,17 +31,27 @@ export interface BeatmapNote {
   /** Slider travel time, in seconds. */
   duration?: number;
   /**
-   * Which hand a two-handed map intends for this note.
-   *
-   * Authoring metadata, not a rule: the engine hit-tests on position alone, so
-   * any hand may take any note. Enforcing it would mean judging a correct hit
-   * as wrong because the wrong hand made it, on handedness that MediaPipe
-   * reports from a mirrored image and sometimes gets wrong.
-   *
-   * What it is for: the playability check applies its minimum spacing per
-   * hand, so two notes meant for different hands are allowed to overlap.
+   * On a night sky, starts a new constellation here instead of linking this
+   * star to the one before it (see render/sky.ts). Purely visual.
    */
-  hand?: 'left' | 'right';
+  newFigure?: boolean;
+  /**
+   * A note that only exists inside a freeze (see `Freeze`): its `t` is the
+   * instant the freeze begins. It needs no timing -- any pinch on it while it
+   * shows is a PERFECT -- and is a miss if still there when the freeze ends.
+   */
+  frozen?: boolean;
+}
+
+/**
+ * A pause written into a map. At game time `t` the run holds still for up to
+ * `seconds` of real time: the music fades out, the rings stop, and the map's
+ * `frozen` notes for that instant appear, to be taken in any order before
+ * the time runs out. Taking the last one ends it early.
+ */
+export interface Freeze {
+  t: number;
+  seconds: number;
 }
 
 /**
@@ -67,24 +77,41 @@ export interface BeatmapPhase {
   targetScale: number;
   /** Optional CSS colour for this phase's note disc. Defaults to PALETTE.cyan. */
   color?: string;
-  /**
-   * Plays the phase over the looping psychedelic video, whose colours jump on
-   * every hit. A map with any such phase also turns the interface rainbow.
-   */
-  psychedelic?: boolean;
-  /**
-   * Flame walls closing in from both sides: how far each one reaches by the end
-   * of the phase, as a fraction of the camera area's width. They grow steadily
-   * from the previous phase's value, and touching them restarts the run.
-   */
-  fire?: number;
+  /** Plays the phase on a night sky instead of paper (see `Sky`). */
+  sky?: Sky;
 }
+
+/**
+ * A night sky behind a phase: stars, light, and the constellations the player's
+ * hits draw. Purely visual -- nothing here changes what is judged or how.
+ */
+export interface Sky {
+  /** Background colour. Consecutive skies cross-fade into each other. */
+  color: string;
+  /**
+   * Stars rushing out from the centre, from 0 (drifting) to 1 (full warp).
+   * Climbs steadily from the previous phase's value across the phase, so a
+   * build-up is a phase that ends at 1.
+   */
+  warp?: number;
+  /** How hard the sky breathes on each beat, 0..1. */
+  pulse?: number;
+  /** Light rays turning slowly behind the playfield. */
+  rays?: boolean;
+}
+
+/** The generated soundtracks a beatmap can name (see lib/soundtracks.ts). */
+export type SoundtrackId = 'groove' | 'constellation';
 
 export interface Beatmap {
   id: string;
   title: string;
   author: string;
   bpm: number;
+  /** Which generated track plays under the map. Defaults to 'groove'. */
+  soundtrack?: SoundtrackId;
+  /** Pauses written into the map, in beatmap seconds. Sorted by `t`. */
+  freezes?: Freeze[];
   /** Sorted by ascending `start`. The first one must start at 0. */
   phases: BeatmapPhase[];
   notes: BeatmapNote[];
@@ -174,6 +201,6 @@ export interface GameSnapshot {
   phaseHint: string;
   /** Increments on every phase change: used as a `key` for the banner. */
   phaseEventId: number;
-  /** True if the run ended because the player touched a fire zone. */
-  failed: boolean;
+  /** The current phase is played on a night sky, so the HUD has to read on dark. */
+  night: boolean;
 }

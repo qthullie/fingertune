@@ -8,6 +8,7 @@ import { PauseScreen } from './components/PauseScreen';
 import { GameEngine } from './game/engine';
 import { HandTracker, type LoadingStep } from './lib/handTracking';
 import { AudioEngine } from './lib/audio';
+import { soundtracks } from './lib/soundtracks';
 import { explainError, type FriendlyError } from './lib/errors';
 import { needsADesk } from './lib/device';
 import { loadHideVideo, saveHideVideo } from './lib/preferences';
@@ -33,9 +34,6 @@ const tracker = new HandTracker();
 const audio = new AudioEngine();
 
 type UiPhase = 'start' | 'calibrating' | 'playing' | 'end' | 'error';
-
-/** How long the "burned" message stays up before the run restarts on its own. */
-const BURNED_RESTART_MS = 2200;
 
 /** Which slow step the loader is on, as a message key. */
 const STEP_KEYS = {
@@ -112,21 +110,12 @@ export function App(): JSX.Element {
         onHitSound: (grade, combo) => audio.playHit(grade, combo),
         onMissSound: (brokeCombo) => audio.playMiss(brokeCombo),
         onSliderTick: () => audio.playSliderTick(),
-        // The soundtrack steps up on every phase.
-        onPhaseChange: (index) => audio.setIntensity(index),
+        onSliderStart: () => audio.playSliderStart(),
         onPause: () => audio.pauseMusic(),
-        onResume: () => audio.resumeMusic(),
+        onResume: (atTime) => audio.resumeMusic(atTime),
+        onFreeze: (edge, time) => audio.freeze(edge, time),
         onFinish: () => {
           const final = engine.getSnapshot();
-          /* Burned: no score, a moment to read why, then straight back in --
-             unless the player already restarted or left in the meantime. */
-          if (final.failed) {
-            audio.stopMusic();
-            window.setTimeout(() => {
-              if (engine.failed && engine.phase === 'finished') startRun();
-            }, BURNED_RESTART_MS);
-            return;
-          }
           const result = submitScore(beatmapRef.current.id, {
             score: final.score,
             accuracy: final.accuracy,
@@ -142,9 +131,14 @@ export function App(): JSX.Element {
     setRecord(null);
     tracker.resetHands();
     const map = beatmapRef.current;
-    audio.setBpm(map.bpm);
+    // Seconds cut from the front of the map when starting at a later phase.
+    const skip = map.phases[phaseRef.current]?.start ?? 0;
     // The music defines t=0, so notes land on the musical grid.
-    const startAt = audio.startMusic();
+    const startAt = audio.startMusic({
+      bpm: map.bpm,
+      soundtrack: soundtracks[map.soundtrack ?? 'groove'],
+      sections: map.phases.map((phase) => phase.start - skip),
+    });
     engine.start(map, startAt, phaseRef.current);
     setUiPhase('playing');
   }, []);
@@ -155,6 +149,8 @@ export function App(): JSX.Element {
     setError(null);
     try {
       await audio.init();
+      // A map with recorded sounds must not start before they can play.
+      await audio.prepare(soundtracks[beatmapRef.current.soundtrack ?? 'groove']);
       // Immediate blip: if you cannot hear it, the problem is the audio output
       // (muted tab, system volume), not the game.
       audio.playTestBlip();
@@ -227,12 +223,12 @@ export function App(): JSX.Element {
     saveHideVideo(hideVideo);
   }, [hideVideo]);
 
-  /* Party mode: the whole interface goes rainbow while a map with psychedelic
-     phases is selected, and back to normal as soon as another one is. */
+  /* A map on a night sky turns the menu into that sky as soon as it is picked. */
   useEffect(() => {
-    const isParty = beatmap.phases.some(p => p.psychedelic);
-    document.body.classList.toggle('party', isParty);
-    return () => { document.body.classList.remove('party'); };
+    document.body.classList.toggle('starry', beatmap.phases.some((phase) => phase.sky));
+    return () => {
+      document.body.classList.remove('starry');
+    };
   }, [beatmap]);
 
   /* Stop the music when the run ends. */
@@ -270,6 +266,8 @@ export function App(): JSX.Element {
             setBeatmap(next);
             setStartPhase(0);
             setBest(loadBest(next.id));
+            // Back from a run, Play skips the loading; R skips everything.
+            if (audio.ready) void audio.prepare(soundtracks[next.soundtrack ?? 'groove']);
           }}
           startPhase={startPhase}
           onSelectPhase={setStartPhase}
@@ -309,12 +307,6 @@ export function App(): JSX.Element {
           onRestart={startRun}
           onQuit={quitToMenu}
         />
-      )}
-      {uiPhase === 'playing' && snapshot.phase === 'finished' && snapshot.failed && (
-        <div className="overlay overlay--pause overlay--burned">
-          <h1 className="title title--plain">{t('burned.title')}</h1>
-          <p className="subtitle">{t('burned.body')}</p>
-        </div>
       )}
       {uiPhase === 'end' && (
         <EndScreen

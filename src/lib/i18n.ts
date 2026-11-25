@@ -43,7 +43,6 @@ const en = {
   'start.maps.label': 'Beatmap',
   'start.phases.label': 'Starting difficulty',
   'start.card.meta': '{bpm} BPM · {notes} notes',
-  'start.card.twoHands': 'two hands',
   'start.card.best': 'Best {score}',
   'start.card.never': 'Never played',
   'start.phaseNote': 'Starting at *{phase}* — scores from a partial run are still saved.',
@@ -184,9 +183,7 @@ const en = {
 
   /* -- beatmap titles -- */
   'map.demo.title': 'Demo — Three phases',
-  'map.drift.title': 'Drift',
-  'map.duet.title': 'Duet',
-  'map.pulse.title': 'Pulse',
+  'map.constellation.title': 'Constellation',
 
   /* -- phases -- */
   'phase.easy.name': 'Phase 1 — Easy',
@@ -195,39 +192,15 @@ const en = {
   'phase.medium.hint': 'Faster, and the targets spread out. Keep your hand up.',
   'phase.hard.name': 'Phase 3 — Hard',
   'phase.hard.hint': 'Short ring, tight windows, no room to drift.',
-  'phase.glide.name': 'Glide',
-  'phase.glide.hint': 'Pinch the head, hold, follow the ball.',
-  'phase.curve.name': 'Curve',
-  'phase.curve.hint': 'The path bends now. Stay on the ball, not ahead of it.',
-  'phase.weave.name': 'Weave',
-  'phase.weave.hint': 'Longer holds, less recovery.',
-  'phase.mirror.name': 'Mirror',
-  'phase.mirror.hint': 'Both hands, together. Left side is your left hand.',
-  'phase.alternate.name': 'Alternate',
-  'phase.alternate.hint': 'Hands take turns. Keep the waiting one open.',
-  'phase.independent.name': 'Independent',
-  'phase.independent.hint': 'One hand holds, the other taps.',
-  'phase.warmup.name': 'Warm-up',
-  'phase.warmup.hint': 'One note every four beats. Find the rhythm.',
-  'phase.drive.name': 'Drive',
-  'phase.drive.hint': 'Every two beats now, side to side.',
-  'phase.sprint.name': 'Sprint',
-  'phase.sprint.hint': 'Bursts of four. Breathe between them.',
-  'phase.spark.name': 'Spark',
-  'phase.spark.hint': 'Pinch on the beat. Never pinch a cracked circle.',
-  'phase.ignite.name': 'Ignite',
-  'phase.ignite.hint':
-    'Flames close in from the sides. Keep your hands in the middle: touching them restarts the run.',
-  'phase.surge.name': 'Surge',
-  'phase.surge.hint': 'Faster, and the flames keep growing.',
-  'phase.float.name': 'Float',
-  'phase.float.hint': 'Long arcs. Stay on the ball, away from the fire.',
-  'phase.glory.name': 'GLORY',
-  'phase.glory.hint': 'Short ring, narrow corridor. Everything at once.',
+  'phase.dusk.name': 'Dusk',
+  'phase.dusk.hint': 'Every note you hit becomes a star. When the sky holds still, gather them all.',
+  'phase.rise.name': 'Rise',
+  'phase.rise.hint': 'The sky is speeding up. Stay on the beat.',
+  'phase.supernova.name': 'Supernova',
+  'phase.supernova.hint': 'Draw the star. Do not break the line.',
+  'phase.afterglow.name': 'Afterglow',
+  'phase.afterglow.hint': 'Look up: everything you drew is still there.',
 
-  'burned.title': 'Burned!',
-  'burned.body':
-    'Your hand touched the flames. They close in from both sides, so keep your hands in the middle. Restarting…',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -244,7 +217,6 @@ const fr: Record<MessageKey, string> = {
   'start.maps.label': 'Beatmap',
   'start.phases.label': 'Difficulté de départ',
   'start.card.meta': '{bpm} BPM · {notes} notes',
-  'start.card.twoHands': 'deux mains',
   'start.card.best': 'Record {score}',
   'start.card.never': 'Jamais joué',
   'start.phaseNote':
@@ -378,9 +350,7 @@ const fr: Record<MessageKey, string> = {
   'mobile.source': 'Voir le code sur GitHub',
 
   'map.demo.title': 'Démo — Trois phases',
-  'map.drift.title': 'Drift',
-  'map.duet.title': 'Duet',
-  'map.pulse.title': 'Pulse',
+  'map.constellation.title': 'Constellation',
 
   'phase.easy.name': 'Phase 1 — Facile',
   'phase.easy.hint':
@@ -389,39 +359,15 @@ const fr: Record<MessageKey, string> = {
   'phase.medium.hint': 'Plus rapide, et les cibles s’écartent. Gardez la main levée.',
   'phase.hard.name': 'Phase 3 — Difficile',
   'phase.hard.hint': 'Anneau court, fenêtres serrées, aucune marge.',
-  'phase.glide.name': 'Glide',
-  'phase.glide.hint': 'Pincez la tête, tenez, suivez la bille.',
-  'phase.curve.name': 'Curve',
-  'phase.curve.hint': 'Le tracé s’incurve. Restez sur la bille, pas devant elle.',
-  'phase.weave.name': 'Weave',
-  'phase.weave.hint': 'Maintiens plus longs, moins de récupération.',
-  'phase.mirror.name': 'Mirror',
-  'phase.mirror.hint': 'Les deux mains, ensemble. Le côté gauche, c’est votre main gauche.',
-  'phase.alternate.name': 'Alternate',
-  'phase.alternate.hint': 'Les mains alternent. Gardez ouverte celle qui attend.',
-  'phase.independent.name': 'Independent',
-  'phase.independent.hint': 'Une main tient, l’autre tape.',
-  'phase.warmup.name': 'Warm-up',
-  'phase.warmup.hint': 'Une note toutes les quatre pulsations. Trouvez le rythme.',
-  'phase.drive.name': 'Drive',
-  'phase.drive.hint': 'Toutes les deux pulsations maintenant, d’un côté à l’autre.',
-  'phase.sprint.name': 'Sprint',
-  'phase.sprint.hint': 'Rafales de quatre. Respirez entre deux.',
-  'phase.spark.name': 'Spark',
-  'phase.spark.hint': 'Pincez sur le temps. Ne pincez jamais un cercle fissuré.',
-  'phase.ignite.name': 'Ignite',
-  'phase.ignite.hint':
-    'Les flammes se resserrent par les côtés. Gardez les mains au centre : les toucher relance la partie.',
-  'phase.surge.name': 'Surge',
-  'phase.surge.hint': 'Plus vite, et les flammes grandissent encore.',
-  'phase.float.name': 'Float',
-  'phase.float.hint': 'De longs arcs. Restez sur la bille, loin du feu.',
-  'phase.glory.name': 'GLORY',
-  'phase.glory.hint': 'Anneau court, couloir étroit. Tout à la fois.',
+  'phase.dusk.name': 'Dusk',
+  'phase.dusk.hint': 'Chaque note touchée devient une étoile. Quand le ciel s’arrête, ramassez-les toutes.',
+  'phase.rise.name': 'Rise',
+  'phase.rise.hint': 'Le ciel s’accélère. Restez sur le temps.',
+  'phase.supernova.name': 'Supernova',
+  'phase.supernova.hint': 'Tracez l’étoile. Ne cassez pas la ligne.',
+  'phase.afterglow.name': 'Afterglow',
+  'phase.afterglow.hint': 'Levez les yeux : tout ce que vous avez tracé est encore là.',
 
-  'burned.title': 'Brûlé !',
-  'burned.body':
-    'Votre main a touché les flammes. Elles se resserrent des deux côtés : gardez les mains au centre. On recommence…',
 };
 
 const DICTIONARIES: Record<Lang, Record<MessageKey, string>> = { en, fr };

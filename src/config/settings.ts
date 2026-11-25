@@ -92,6 +92,17 @@ export interface Settings {
    * error to something smaller than a target.
    */
   PREDICT_MAX_STEP: number;
+  /**
+   * Keep the hand moving between two detections.
+   *
+   * The webcam runs at ~30 fps and the game at 60 or more, so without this the
+   * cursor and the skeleton only move on every other frame. On, each frame
+   * carries them along their filtered velocity for the time elapsed since the
+   * last detection (see `HandState.advance`). Off is the old, stepped motion.
+   * Hit timing is unaffected either way: a pinch is only ever decided on a
+   * detection.
+   */
+  EXTRAPOLATE_BETWEEN_FRAMES: boolean;
 
   /**
    * Run MediaPipe in a Web Worker instead of on the render thread.
@@ -112,7 +123,7 @@ export interface Settings {
   THREADED_INFERENCE: boolean;
 
   /* ---- Hand tracking ------------------------------------------------------------- */
-  /** Hands tracked. 2 by default, for Duet; the whole pipeline loops over N hands. */
+  /** Hands tracked. Any of them can hit any note; the whole pipeline loops over N hands. */
   MAX_HANDS: number;
   MIN_DETECTION_CONF: number;
   MIN_PRESENCE_CONF: number;
@@ -173,6 +184,17 @@ export interface Settings {
   /** Tracking debug overlay (key D in game). */
   DEBUG: boolean;
 
+  /* ---- Freezes (Beatmap.freezes) ----------------------------------------- */
+  /**
+   * Seconds a freeze holds before its notes appear: long enough for the
+   * music to fade and the player to see the world stop, short enough not to
+   * feel like waiting. The playability check counts from here
+   * (FREEZE_ENTRY in scripts/check-beatmaps.mjs).
+   */
+  FREEZE_ENTRY: number;
+  /** Seconds a freeze lingers after its last note is taken, before ending early. */
+  FREEZE_LINGER: number;
+
   /* ---- Pause ------------------------------------------------------------ */
   /**
    * Seconds without a tracked hand before the run pauses itself.
@@ -225,6 +247,7 @@ export const settings: Settings = {
 
   PREDICT_AHEAD: 0.045,
   PREDICT_MAX_STEP: 0.06,
+  EXTRAPOLATE_BETWEEN_FRAMES: true,
 
   MAX_HANDS: 2,
   MIN_DETECTION_CONF: 0.5,
@@ -243,6 +266,8 @@ export const settings: Settings = {
   RESUME_REWIND: 1.2,
   MASTER_VOLUME: -6,
   DEBUG: false,
+  FREEZE_ENTRY: 0.8,
+  FREEZE_LINGER: 0.5,
 };
 
 /**

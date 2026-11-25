@@ -75,6 +75,10 @@
   --ink: #16162a;
   --ink-soft: #61617a;
 
+  /* Ink for words over a night sky (NIGHT_INK in render/sky.ts). */
+  --night-ink: #f4f1ff;
+  --night-ink-soft: #b9b4d9;
+
   --font-pixel: 'Press Start 2P', 'Courier New', monospace;
   --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -648,6 +652,33 @@ button:disabled {
   padding: 0 calc(var(--px) / 2);
   color: var(--ink);
   background: var(--cyan);
+}
+
+/*
+ * Phases on a night sky (render/sky.ts). Words that stand on the canvas turn
+ * light; words that sit on a block of their own -- a grade, the hot combo --
+ * keep the ink of that block, so a GOOD, which has no colour of its own, gets
+ * a paper block to stand on.
+ *
+ * The phase banner loses its block instead. A new phase starts on its first
+ * note, so for its first three seconds an opaque banner sat on the notes the
+ * player had to read; floating words over the sky hide nothing.
+ */
+.hud--night :is(.hud-score-value, .hud-combo:not(.hud-combo--hot), .hud-countdown-number, .hud-target-value, .hud-phase-name) {
+  color: var(--night-ink);
+}
+
+.hud--night :is(.hud-accuracy, .hud-status, .hud-target-label, .hud-grade-offset, .hud-countdown-hint, .hud-phase-hint) {
+  color: var(--night-ink-soft);
+}
+
+.hud--night .hud-phase-banner {
+  background: none;
+  box-shadow: none;
+}
+
+.hud--night .hud-grade-label {
+  background-color: var(--paper);
 }
 
 /* ------------------------------------------------------------------ results -- */
@@ -1272,137 +1303,114 @@ button:disabled {
   }
 }
 
-/* -------------------------------------------------------------- party mode --- */
+/* ------------------------------------------------------------ starry menu --- */
 
 /*
- * Chromatic selected: every screen goes rainbow, and comes back the moment
- * another map is picked. A thin white veil keeps ink text readable on every hue
- * the gradient sweeps through.
+ * A map played on a night sky turns the menu into that sky the moment it is
+ * picked, so choosing it already feels like stepping outside. The palette is
+ * swapped through the custom properties everything reads; the sky itself is
+ * three layers: a fixed field of stars in the background, a second field
+ * that twinkles, and a shooting star crossing every few seconds.
+ *
+ * The one place the interface allows itself gradients: a star is a soft
+ * point of light, and a night sky is not a flat colour.
  */
-@keyframes party-bg {
-  0%,
-  100% {
-    background-position: 0 0, 0% 50%;
-  }
-  50% {
-    background-position: 0 0, 100% 50%;
-  }
+body.starry {
+  --paper: #0d0b24;
+  --paper-shade: #1b1840;
+  --rule: #3a3566;
+  --ink: #f4f1ff;
+  --ink-soft: #b9b4d9;
+  --cyan: #7dd3fc;
+  --pink: #c4b5fd;
 }
 
-/* Light tints only: ink has to stay readable on every one of them. */
-@keyframes party-fill {
-  0%,
-  100% {
-    background-color: #ff6fae;
-  }
-  25% {
-    background-color: #ffd166;
-  }
-  50% {
-    background-color: #5ee6ff;
-  }
-  75% {
-    background-color: #c79bff;
-  }
-}
-
-@keyframes party-frame {
-  0%,
-  100% {
-    outline-color: #ff006c;
-  }
-  25% {
-    outline-color: #ffb300;
-  }
-  50% {
-    outline-color: #00d4ff;
-  }
-  75% {
-    outline-color: #9d00ff;
-  }
-}
-
-@keyframes party-text {
-  to {
-    background-position: 200% center;
-  }
-}
-
-body.party .overlay:not(.overlay--pause) {
+body.starry .overlay--start {
   background:
-    linear-gradient(rgb(255 255 255 / 0.12), rgb(255 255 255 / 0.12)),
-    linear-gradient(120deg, #ff006c, #ff9900, #ffee00, #00e08a, #00d4ff, #b14dff, #ff006c);
-  background-size: 100% 100%, 300% 300%;
-  animation: party-bg 3s ease-in-out infinite;
+    radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+    radial-gradient(1px 1px at 140px 90px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 60px 170px, #fff, transparent),
+    radial-gradient(1px 1px at 210px 220px, #fff, transparent),
+    radial-gradient(1px 1px at 100px 260px, #cfe8ff, transparent),
+    radial-gradient(1.5px 1.5px at 250px 60px, #fff6d8, transparent),
+    radial-gradient(ellipse at 50% 115%, #4b2a8a 0%, transparent 60%),
+    linear-gradient(#060516, #120f35 55%, #26164c);
+  background-size:
+    280px 280px, 280px 280px, 280px 280px, 280px 280px, 280px 280px, 280px 280px,
+    100% 100%, 100% 100%;
+  background-attachment: fixed;
 }
 
-body.party .topbar {
-  background: rgb(255 255 255 / 0.6);
+body.starry .overlay--start::before,
+body.starry .overlay--start::after {
+  content: '';
+  position: fixed;
+  pointer-events: none;
+  z-index: 0;
 }
 
-body.party .title::after {
-  height: calc(var(--px) * 2);
-  background: linear-gradient(90deg, #ff006c, #ff9900, #ffee00, #00e08a, #00d4ff, #9d00ff);
+/* The twinkling field: a second grid of brighter stars, breathing. */
+body.starry .overlay--start::before {
+  inset: 0;
+  background:
+    radial-gradient(2px 2px at 40px 50px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 190px 140px, #e0d7ff, transparent),
+    radial-gradient(2px 2px at 300px 260px, #fff, transparent),
+    radial-gradient(1.5px 1.5px at 90px 330px, #fff, transparent);
+  background-size: 370px 370px;
+  animation: starry-twinkle 3.2s ease-in-out infinite alternate;
 }
 
-body.party button:not(.card, .chip, .button--ghost),
-body.party .chip--active,
-body.party .best-score,
-body.party .hud-combo--hot {
-  animation: party-fill 2s steps(8, end) infinite;
+/* The shooting star: a streak that crosses the top of the screen, then waits. */
+body.starry .overlay--start::after {
+  top: 12%;
+  left: -20%;
+  width: 160px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #fff);
+  transform: rotate(18deg);
+  opacity: 0;
+  animation: starry-shoot 7s linear infinite;
 }
 
-body.party .card,
-body.party .chip {
-  outline: var(--px) solid;
-  animation: party-frame 2s steps(8, end) infinite;
+body.starry .overlay--start > * {
+  position: relative;
+  z-index: 1;
 }
 
-body.party .card--active {
-  outline-width: calc(var(--px) * 2);
+body.starry .title {
+  color: #fde68a;
 }
 
-/* The rainbow frame takes the outline the focus ring used: push it out instead. */
-body.party .card:focus-visible,
-body.party .chip:focus-visible {
-  outline-offset: calc(var(--px) * 2);
+body.starry .card--active {
+  box-shadow:
+    0 0 0 calc(var(--px) / 2) var(--cyan),
+    0 0 calc(var(--px) * 6) rgb(125 211 252 / 0.45);
 }
 
-body.party .card--accented .card-title {
-  background: linear-gradient(90deg, #ff006c, #ff9900, #00d4ff, #9d00ff, #ff006c);
-  background-size: 200% auto;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: party-text 2s linear infinite;
+@keyframes starry-twinkle {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-body.party .tips li::marker {
-  color: #9d00ff;
-}
-
-/* Over the psychedelic video: white with an ink outline reads on every hue. */
-body.party .hud-score-value,
-body.party .hud-accuracy,
-body.party .hud-combo,
-body.party .hud-countdown-number,
-body.party .hud-countdown-hint,
-body.party .hud-status,
-body.party .hud-target-label,
-body.party .hud-target-value {
-  color: #fff;
-  text-shadow:
-    2px 0 0 #000,
-    -2px 0 0 #000,
-    0 2px 0 #000,
-    0 -2px 0 #000;
-}
-
-body.party .hud-progress-fill {
-  background: linear-gradient(90deg, #ff006c, #ff9900, #ffee00, #00e08a, #00d4ff, #9d00ff);
-}
-
-/* Burned: over the frozen run like the pause, titled in the flames' colour. */
-.overlay--burned .title {
-  color: var(--red);
+@keyframes starry-shoot {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(18deg);
+  }
+  3% {
+    opacity: 1;
+  }
+  14% {
+    opacity: 0;
+    transform: translate(140vw, 45vw) rotate(18deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(140vw, 45vw) rotate(18deg);
+  }
 }

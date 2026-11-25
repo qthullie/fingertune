@@ -10,8 +10,8 @@
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import { EffectSystem } from './effects';
-import type { Beatmap, BeatmapPhase, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
-import { fireEdges, pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
+import type { Beatmap, BeatmapPhase, Freeze, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
+import { pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
 import { pointAt, prepareSliderPath, sliderProgress } from './slider';
 
 /** A cursor reported by the render loop, in CSS pixels. */
@@ -51,21 +51,28 @@ export class GameEngine {
   private phaseEventId = 0;
   /** Phases shifted by the countdown, ready to compare against `time`. */
   private phases: BeatmapPhase[] = [];
-  /** Index, in the beatmap's own phase list, that this run started from. */
-  private startPhase = 0;
   private lastBeat = -1;
-  private _bgHueOffset = 0;
-  private _failed = false;
 
   private t0 = 0;
+  /** The clock at the last advanceClock(), for ages measured in real time. */
+  private clockNow = 0;
+  /** The map's freezes, shifted like the notes. `fired` survives a rewind. */
+  private freezes: Array<Freeze & { fired: boolean }> = [];
+  /** The freeze in progress, and the clock when it began. */
+  private frozen: { freeze: Freeze; startClock: number } | null = null;
+  /** The last freeze to end, and the clock when it did. */
+  private lastFrozen: { freeze: Freeze; endClock: number } | null = null;
+  /** The clock when the run was paused, so a freeze can pick up where it was. */
+  private pausedAt = 0;
   private clock: () => number = () => performance.now() / 1000;
   private onHitSound: ((grade: Exclude<Grade, 'MISS'>, combo: number) => void) | null = null;
   private onMissSound: ((brokeCombo: boolean) => void) | null = null;
   private onSliderTick: (() => void) | null = null;
-  private onPhaseChange: ((index: number, phase: BeatmapPhase | undefined) => void) | null = null;
+  private onSliderStart: (() => void) | null = null;
   private onFinish: (() => void) | null = null;
   private onPause: (() => void) | null = null;
   private onResume: ((atTime: number) => void) | null = null;
+  private onFreeze: ((edge: 'start' | 'end', time: number) => void) | null = null;
 
   private listeners = new Set<Listener>();
   private snapshotCache: GameSnapshot = this.buildSnapshot();
@@ -103,7 +110,7 @@ export class GameEngine {
       duration: this.duration,
       handVisible: this.handVisible,
       autoPaused: this.autoPaused,
-      failed: this._failed,
+      night: current?.sky !== undefined,
     };
   }
 
@@ -115,26 +122,33 @@ export class GameEngine {
 
   /* ------------------------------------------------------------------ wiring */
 
-  /** Wires the audio clock and the sound / phase / finish callbacks. */
+  /** Wires the audio clock and the sound / finish callbacks. */
   configure(options: {
     clock: () => number;
     onHitSound: (grade: Exclude<Grade, 'MISS'>, combo: number) => void;
     onMissSound: (brokeCombo: boolean) => void;
     onSliderTick: () => void;
-    onPhaseChange: (index: number, phase: BeatmapPhase | undefined) => void;
+    /** A slider's head was caught. */
+    onSliderStart?: () => void;
     onFinish: () => void;
     onPause?: () => void;
     /** @param atTime the game time the run resumes at, rewind included. */
     onResume?: (atTime: number) => void;
+    /**
+     * A freeze (see `Beatmap.freezes`) begins or ends.
+     * @param time game time it holds at
+     */
+    onFreeze?: (edge: 'start' | 'end', time: number) => void;
   }): void {
     this.clock = options.clock;
     this.onHitSound = options.onHitSound;
     this.onMissSound = options.onMissSound;
     this.onSliderTick = options.onSliderTick;
-    this.onPhaseChange = options.onPhaseChange;
+    this.onSliderStart = options.onSliderStart ?? null;
     this.onFinish = options.onFinish;
     this.onPause = options.onPause ?? null;
     this.onResume = options.onResume ?? null;
+    this.onFreeze = options.onFreeze ?? null;
   }
 
   /** Number of tracked hands, reported by the render loop. */
@@ -166,7 +180,6 @@ export class GameEngine {
     const index = Math.max(0, Math.min(fromPhase, sorted.length - 1));
     // Seconds cut from the front of the map.
     const skip = sorted[index]?.start ?? 0;
-    this.startPhase = index;
 
     // Phases are shifted by the countdown, exactly like the notes.
     this.phases = sorted
@@ -200,6 +213,8 @@ export class GameEngine {
         radius: settings.TARGET_RADIUS * (phase?.targetScale ?? 1),
         phaseIndex,
         ...(phase?.color !== undefined && { color: phase.color }),
+        ...(note.newFigure && { newFigure: true }),
+        ...(note.frozen && { frozen: true }),
 
         points: path.points,
         cumulative: path.cumulative,
@@ -229,11 +244,14 @@ export class GameEngine {
     this.phaseIndex = 0;
     this.phaseEventId += 1;
     this.lastBeat = -1;
-    this._bgHueOffset = 0;
-    this._failed = false;
     this.t0 = startAt ?? this.clock();
+    this.clockNow = this.t0;
+    this.freezes = (beatmap.freezes ?? [])
+      .filter((freeze) => freeze.t >= skip)
+      .map((freeze) => ({ ...freeze, t: freeze.t - skip + settings.COUNTDOWN, fired: false }));
+    this.frozen = null;
+    this.lastFrozen = null;
     this.publish();
-    this.onPhaseChange?.(this.startPhase, this.phases[0]);
   }
 
   /** Index of the phase active at game time `t` (countdown included). */
@@ -280,43 +298,58 @@ export class GameEngine {
     return this.phases[this.phaseIndex];
   }
 
-  get bgHueOffset(): number { return this._bgHueOffset; }
-
-  get failed(): boolean { return this._failed; }
-
-  /**
-   * How far the flame walls reach in from each side right now (see
-   * `BeatmapPhase.fire`): a steady climb across the phase, from where the
-   * previous one left off, so the corridor never jumps shut under a hand.
-   */
-  get fireZoneMargin(): number {
-    const phase = this.phases[this.phaseIndex];
-    if (!phase?.fire) return 0;
-    const from = this.phases[this.phaseIndex - 1]?.fire ?? 0;
-    const end = this.phases[this.phaseIndex + 1]?.start ?? this.duration;
-    const progress = Math.min(1, Math.max(0, (this.time - phase.start) / (end - phase.start)));
-    return from + (phase.fire - from) * progress;
+  /** The phase before the current one, if the run has been through it. */
+  get previousPhase(): BeatmapPhase | undefined {
+    return this.phases[this.phaseIndex - 1];
   }
 
-  /** Ends the run immediately — the player entered a fire zone. */
-  fail(): void {
-    if (this.phase !== 'playing') return;
-    this._failed = true;
-    this.effects.flash('#ff3300', 0.7);
-    this.phase = 'finished';
-    this.publish();
-    this.onFinish?.();
+  get phaseCount(): number {
+    return this.phases.length;
+  }
+
+  /** Seconds since the current phase began. */
+  get phaseElapsed(): number {
+    return this.time - (this.currentPhase?.start ?? 0);
+  }
+
+  /**
+   * Beats since the music started: whole numbers fall on the beat. Negative
+   * during the countdown.
+   */
+  get beat(): number {
+    const bpm = this.beatmap?.bpm ?? 0;
+    return ((this.time - settings.COUNTDOWN) * bpm) / 60;
+  }
+
+  /** How fast the stars rush outward right now (see `Sky.warp`). */
+  get skyWarp(): number {
+    return this.ramp((phase) => phase.sky?.warp);
+  }
+
+  /**
+   * A per-phase value that climbs steadily across the phase from where the
+   * previous phase left it. 0 when the current phase does not set it.
+   */
+  private ramp(read: (phase: BeatmapPhase) => number | undefined): number {
+    const phase = this.phases[this.phaseIndex];
+    const to = phase ? read(phase) : undefined;
+    if (!phase || !to) return 0;
+    const previous = this.phases[this.phaseIndex - 1];
+    const from = (previous && read(previous)) ?? 0;
+    const end = this.phases[this.phaseIndex + 1]?.start ?? this.duration;
+    const progress = Math.min(1, Math.max(0, (this.time - phase.start) / (end - phase.start)));
+    return from + (to - from) * progress;
   }
 
   /** Targets currently displayed / judgeable (approach window is per phase). */
   activeTargets(): Target[] {
     const now = this.time;
-    return this.targets.filter(
-      (target) =>
-        !target.dead &&
-        now >= target.t - target.approach &&
-        now <= target.t + target.duration + target.goodWindow,
-    );
+    return this.targets.filter((target) => {
+      if (target.dead) return false;
+      // A frozen note shows only inside its freeze, once the freeze has settled.
+      if (target.frozen) return this.collecting(target.t);
+      return now >= target.t - target.approach && now <= target.t + target.duration + target.goodWindow;
+    });
   }
 
   /**
@@ -325,7 +358,82 @@ export class GameEngine {
    * of error against a Perfect window that is only 60 ms wide.
    */
   advanceClock(): void {
-    if (this.phase === 'playing') this.time = this.clock() - this.t0;
+    if (this.phase !== 'playing') return;
+    const now = this.clock();
+    this.clockNow = now;
+
+    const frozen = this.frozen;
+    if (frozen) {
+      const elapsed = now - frozen.startClock;
+      const allTaken = elapsed >= settings.FREEZE_ENTRY + settings.FREEZE_LINGER && this.frozenLeft() === 0;
+      if (elapsed < frozen.freeze.seconds && !allTaken) {
+        this.time = frozen.freeze.t;
+        return;
+      }
+      this.endFreeze(now);
+    }
+
+    this.time = now - this.t0;
+    const next = this.freezes.find((freeze) => !freeze.fired && this.time >= freeze.t);
+    if (next) this.beginFreeze(next, now);
+  }
+
+  /**
+   * The freeze in progress, if any: how long it has run, in real seconds,
+   * how long it has left, and how many of its notes are still to take.
+   */
+  get freeze(): { freeze: Freeze; elapsed: number; left: number; notesLeft: number } | null {
+    if (!this.frozen) return null;
+    const elapsed = this.clockNow - this.frozen.startClock;
+    return {
+      freeze: this.frozen.freeze,
+      elapsed,
+      left: Math.max(0, this.frozen.freeze.seconds - elapsed),
+      notesLeft: this.frozenLeft(),
+    };
+  }
+
+  /** How long ago the last freeze ended, in real seconds. */
+  get sinceFreeze(): number {
+    return this.lastFrozen ? this.clockNow - this.lastFrozen.endClock : Infinity;
+  }
+
+  /** True while the freeze that began at `t` shows its notes. */
+  private collecting(t: number): boolean {
+    const frozen = this.frozen;
+    if (!frozen || Math.abs(frozen.freeze.t - t) > 1e-6) return false;
+    return this.clockNow - frozen.startClock >= settings.FREEZE_ENTRY;
+  }
+
+  private frozenLeft(): number {
+    const frozen = this.frozen;
+    if (!frozen) return 0;
+    return this.targets.filter((target) => target.frozen && !target.dead && Math.abs(target.t - frozen.freeze.t) < 1e-6)
+      .length;
+  }
+
+  /** Holds the run at `freeze.t`, from the instant it was crossed. */
+  private beginFreeze(freeze: Freeze & { fired: boolean }, now: number): void {
+    freeze.fired = true;
+    this.frozen = { freeze, startClock: now - (this.time - freeze.t) };
+    this.time = freeze.t;
+    this.snapshotDirty = true;
+    this.onFreeze?.('start', freeze.t);
+  }
+
+  /** Lets time run again from where it held. Notes not taken are misses. */
+  private endFreeze(now: number): void {
+    const frozen = this.frozen;
+    if (!frozen) return;
+    for (const target of this.targets) {
+      if (target.frozen && !target.dead && Math.abs(target.t - frozen.freeze.t) < 1e-6) this.judge(target, 'MISS');
+    }
+    this.frozen = null;
+    this.lastFrozen = { freeze: frozen.freeze, endClock: now };
+    this.t0 = now - frozen.freeze.t;
+    this.time = frozen.freeze.t;
+    this.snapshotDirty = true;
+    this.onFreeze?.('end', this.time);
   }
 
   /**
@@ -341,6 +449,7 @@ export class GameEngine {
   pause(auto = false): void {
     if (this.phase !== 'playing') return;
     this.phase = 'paused';
+    this.pausedAt = this.clock();
     this.autoPaused = auto;
     this.onPause?.();
     this.publish();
@@ -356,6 +465,16 @@ export class GameEngine {
    */
   resume(): void {
     if (this.phase !== 'paused') return;
+    // A freeze is already still: it picks up with the time it had left,
+    // rather than rewinding into the music it silenced.
+    if (this.frozen) {
+      this.frozen.startClock += this.clock() - this.pausedAt;
+      this.autoPaused = false;
+      this.handLostFor = 0;
+      this.phase = 'playing';
+      this.publish();
+      return;
+    }
     const at = Math.max(0, this.time - settings.RESUME_REWIND);
     this.time = at;
     this.t0 = this.clock() - at;
@@ -427,13 +546,13 @@ export class GameEngine {
       }
     }
 
-    // Phase change: banner plus a step up in musical intensity.
+    // Phase change: banner and flash. The music switches on its own grid
+    // (see AudioEngine.startMusic), not here a frame late.
     const phaseIndex = this.phaseIndexAt(this.time);
     if (phaseIndex !== this.phaseIndex) {
       this.phaseIndex = phaseIndex;
       this.phaseEventId += 1;
       this.snapshotDirty = true;
-      this.onPhaseChange?.(this.startPhase + phaseIndex, this.phases[phaseIndex]);
       const newPhase = this.phases[phaseIndex];
       if (newPhase?.color) {
         this.effects.flash(newPhase.color, 0.45);
@@ -453,14 +572,6 @@ export class GameEngine {
 
     for (const target of this.targets) {
       if (target.dead) continue;
-
-      // Hazard: silently expire if not pinched; penalise only if pinched.
-      if (target.kind === 'hazard') {
-        if (this.time > target.t + target.goodWindow) {
-          target.dead = true;
-        }
-        continue;
-      }
 
       // Head never hit: a miss, for a circle and for a slider alike.
       if (target.sliderState === 'pending' && this.time > target.t + target.goodWindow) {
@@ -522,11 +633,6 @@ export class GameEngine {
     // on empty space).
     if (!grade) return false;
 
-    if (best.kind === 'hazard') {
-      this.judge(best, 'MISS');
-      return true;
-    }
-
     this.judge(best, grade);
     return true;
   }
@@ -547,16 +653,6 @@ export class GameEngine {
    */
   trackSliders(cursors: readonly CursorInput[], playfield: Playfield, dt: number): void {
     if (this.phase !== 'playing') return;
-
-    // Fire zone: touching the flame walls ends the run immediately.
-    const margin = this.fireZoneMargin;
-    if (margin > 0) {
-      const edges = fireEdges(playfield, margin);
-      if (cursors.some((c) => c.position.x < edges.left || c.position.x > edges.right)) {
-        this.fail();
-        return;
-      }
-    }
 
     const now = this.time;
 
@@ -638,6 +734,7 @@ export class GameEngine {
     // A grabbed slider stays on screen until its tail.
     target.dead = !startsSlider;
     if (startsSlider) {
+      this.onSliderStart?.();
       target.sliderState = 'holding';
       target.lastTickAt = this.time;
     } else if (target.kind === 'slider' && grade === 'MISS' && isSliderHead) {
@@ -665,11 +762,6 @@ export class GameEngine {
       this.effects.burst(at, style.color, grade === 'PERFECT' ? 26 : 14);
       this.effects.flash(style.color, grade === 'PERFECT' ? 0.28 : 0.16);
       if (target.color) this.effects.burst(at, target.color, grade === 'PERFECT' ? 20 : 8);
-      if (this.currentPhase?.psychedelic) {
-        const palette = ['#ff0066','#00ffcc','#ff9900','#ff00ff','#00ff88','#ffff00','#ff3300','#00aaff'];
-        this.effects.flash(palette[Math.floor(Math.random() * palette.length)]!, 0.09);
-        this._bgHueOffset += 40 + Math.random() * 120;
-      }
       this.onHitSound?.(grade, this.combo);
     }
     this.snapshotDirty = true;

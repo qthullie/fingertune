@@ -178,8 +178,7 @@ gesture is still visible.
 The pipeline loops over N hands and assigns each detection to a fixed slot from
 its **handedness** label rather than its position in the result array — MediaPipe
 can swap that order between frames, which would hand one hand's filter state to
-the other. `MAX_HANDS` is 2: *Duet* needs both hands, every other chart is
-played with one.
+the other. `MAX_HANDS` is 2, and either hand can take any note.
 
 ### 4. Coordinate spaces
 
@@ -242,6 +241,14 @@ in the wrong direction than the lag it was correcting. `PREDICT_MAX_STEP` caps a
 single frame's extrapolation below the width of a target, so the worst case is a
 near miss rather than a lurch across the playfield.
 
+**The hand moves on every frame, not every detection.** The webcam delivers
+~30 frames a second to a loop that draws 60, so the cursor and the skeleton
+used to hold still for a frame and then jump. Between two detections each
+landmark is now carried along that same velocity for the time elapsed since the
+last one, under the same ceiling, and for 100 ms at most so a stalled pipeline
+freezes the hand instead of throwing it. Only positions move: a pinch is still
+decided on detections alone.
+
 Tune it against your own machine rather than against a number: press <kbd>D</kbd>
 and watch the reported offset on your hits. Consistently late, raise
 `PREDICT_AHEAD`; consistently early, lower it. At `0` this is the behaviour from
@@ -260,12 +267,13 @@ while you pinch is the fastest way to pick your own numbers.
 | `PINCH_COOLDOWN_MS` | `140` | minimum delay between two triggers |
 | `OEF_MIN_CUTOFF` | `1.7` | lower = smoother cursor, more lag |
 | `OEF_BETA` | `0.02` | higher = snappier on fast moves, more jitter |
-| `MAX_HANDS` | `2` | tracked hands (Duet needs both; every other chart is one-handed) |
+| `MAX_HANDS` | `2` | tracked hands; either one can take any note |
 | `MIN_DETECTION_CONF` / `MIN_TRACKING_CONF` | `0.5` | MediaPipe confidence gates |
 | `HAND_LOST_TIMEOUT` | `0.5 s` | grace period before a hand is forgotten |
 | `THREADED_INFERENCE` | `true` | run MediaPipe in a Web Worker (falls back inline on its own) |
 | `PREDICT_AHEAD` | `0.045 s` | how far ahead the cursor is projected — raise it if hits read late |
 | `PREDICT_MAX_STEP` | `0.06` | ceiling on one frame's extrapolation, so a reversal cannot lurch |
+| `EXTRAPOLATE_BETWEEN_FRAMES` | `true` | keep the hand moving at 60 fps between two ~30 fps detections |
 | `SHOW_SKELETON` | `true` | draw all 21 landmarks and bones (<kbd>S</kbd>) |
 | `SHOW_VIDEO` | `true` | draw the webcam image at all — off is privacy mode (<kbd>V</kbd>) |
 | `PIXEL_SCALE` | `1` | screen pixels per rendered pixel; above 1 the playfield goes blocky |
@@ -352,26 +360,23 @@ The soundtrack is synthesised by Tone.js on the same transport and grows with
 each phase; misses are audible; the best score per beatmap is kept in
 `localStorage`.
 
-**Four beatmaps**, each built around one idea. *Demo* (120 BPM) teaches both
-note kinds at a pace that forgives everything. *Pulse* (140 BPM) has no sliders
-at all, so nothing asks you to hold a pinch and the notes sit far closer
-together — a map about timing and nothing else. *Drift* (100 BPM) is almost all
-sliders, which is a test of holding a pinch steady while the whole hand travels,
-and that is where the One-Euro filter is least certain. Pulse and Drift are not
-harder than each other; they fail for different reasons.
+*Demo* (120 BPM) teaches both note kinds at a pace that forgives everything.
 
-*Duet* (110 BPM) is played with **both hands**, and nothing in the engine checks
-which hand hit what. The map is split down the middle — left-hand notes never
-leave the left third, right-hand notes the right third — so what makes it
-two-handed is simply that one hand cannot be in both places at once. Enforcing
-the hand in code would be worse than useless: MediaPipe reports handedness from
-a mirrored image and gets it wrong often enough that a correct hit would
-sometimes be judged a miss. Its three phases are three kinds of coordination:
-mirror, alternate, and one hand holding a slider while the other taps.
-
-**And a fifth.** It is on the start screen with the others, and this README
-will say no more about it than that it does not play like them. Pick it and
-find out.
+*Constellation* (100 BPM) is built the other way round from the demo: the song
+first, the chart second, like the last level of a rhythm game. Its notes are
+stars and its sliders shooting stars; every note you hit stays in the sky,
+linked to the one before it, and each figure takes its own corner of the
+night; a miss breaks the line, and the final phase lights up everything the
+run drew and ties it together. Twice the sky holds still (`freezes`): the
+music fades, and a figure's stars hang there to be gathered in any order
+before the time runs out, each one a step up the scale. Its music is a waltz
+for a small orchestra in an observatory -- celesta, harp, glockenspiel,
+pizzicato, cello, a soprano -- recorded one note at a time with ElevenLabs by
+[`scripts/make-sounds.mjs`](scripts/make-sounds.mjs), which also tunes each
+instrument to the nearest semitone so they play in tune together. The files
+are committed: neither a build nor a player needs a key. A build-up whose
+stars go to warp, two beats of silence and a drop carry the intensity, so the
+notes do not have to: they never come closer than 0.9 s apart.
 
 **A run can start at any phase.** Everything before it is dropped and the rest
 slides back to zero, so starting at the last phase is a real run at that
@@ -426,7 +431,10 @@ propped up on a stand.
 Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
 `duration` for sliders) and phase definitions — in
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
-and `slider()` helpers. Add yours and register it in
+and `slider()` helpers. A map can name its music (`soundtrack`, see
+[`src/lib/soundtracks.ts`](src/lib/soundtracks.ts)), and a phase can play on a
+night sky instead of paper (`sky`, see [`src/render/sky.ts`](src/render/sky.ts)) and
+hold still to have notes gathered (`freezes`, with `frozen` notes). Add yours and register it in
 [`src/beatmaps/index.ts`](src/beatmaps/index.ts); `npm run build` checks every
 chart before it ships ([`scripts/check-beatmaps.mjs`](scripts/check-beatmaps.mjs)).
 
@@ -558,6 +566,9 @@ src/
     handTracking.ts   MediaPipe, landmark smoothing, pinch state machine, hand slots
     oneEuro.ts        One-Euro filter
     audio.ts          Tone.js: reference clock, generated soundtrack, hit/miss sounds
+    sampleDeck.ts     recorded sounds: one-shots, repitched notes, samplers
+    sounds.ts         the generated sound sets, and the note each instrument is tuned to
+    soundtracks.ts    what the generated band plays, one arrangement per track
     handWorker.ts     MediaPipe in a Web Worker, off the render thread
     calibration.ts    measuring a player's pinch range, and keeping it
     highscores.ts     localStorage best scores
@@ -572,11 +583,11 @@ src/
   config/settings.ts  every knob, mutable at runtime
   game/               engine (timing windows, score, phases), slider geometry,
                       effects, types
-  render/             view + playfield transforms, renderer (video, targets, skeleton)
+  render/             view + playfield transforms, renderer (video, targets, skeleton),
+                      night skies and constellations
   components/         GameCanvas (loop), Hud, Leaderboard, and the Start,
                       Calibration, Pause, End, Error and Mobile screens
   fonts/              Press Start 2P, self-hosted (OFL, see fonts/OFL.txt)
-  assets/             a looping backdrop video, rendered by a script below
   styles.css          the pixel-art design system
   beatmaps/           charts and phase definitions
 supabase/
@@ -585,9 +596,9 @@ supabase/
 scripts/
   copy-assets.mjs     MediaPipe wasm and the favicon into public/ (predev, prebuild)
   check-beatmaps.mjs  every chart validated before a build ships it
+  make-sounds.mjs     generates the scene maps' recorded sounds (ElevenLabs, ffmpeg)
   fetch-model.mjs     the hand model, for running fully offline
   make-og.mjs         draws public/og-card.png, the link-preview card
-  make-psychedelic-video.mjs  renders that backdrop with ffmpeg
   fonts/              Inter, for the card only (OFL, see scripts/fonts)
 ```
 

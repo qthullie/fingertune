@@ -24,13 +24,20 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const MIN_GAP = 0.6;
 /** Keep notes clear of the playfield edge, where tracking is worst. */
 const MARGIN = 0.04;
+/**
+ * Seconds of a freeze per frozen note: no timing to meet, but the hand still
+ * has to travel, pinch and open again for each.
+ */
+const FROZEN_PINCH = 0.7;
+/**
+ * Seconds at the start of a freeze before its notes appear (FREEZE_ENTRY in
+ * src/config/settings.ts).
+ */
+const FREEZE_ENTRY = 0.8;
 
 const MAPS = [
   ['demo', 'demoBeatmap'],
-  ['pulse', 'pulseBeatmap'],
-  ['drift', 'driftBeatmap'],
-  ['duet', 'duetBeatmap'],
-  ['chromatic', 'chromaticBeatmap'],
+  ['constellation', 'constellationBeatmap'],
 ];
 
 const out = mkdtempSync(join(tmpdir(), 'fingertune-maps-'));
@@ -93,26 +100,40 @@ try {
       }
     }
 
-    /* Notes on separate hands are meant to overlap, so the gap rule is applied
-       per hand. A map with no hand field is single-handed and all its notes
-       land in the same bucket. */
-    const byHand = new Map();
-    for (const note of notes) {
-      const hand = note.hand ?? 'any';
-      if (!byHand.has(hand)) byHand.set(hand, []);
-      byHand.get(hand).push(note);
+    /* Frozen notes are taken inside a freeze, in any order, with no timing:
+       they are checked against their freeze rather than against each other.
+       A freeze adds no time between the notes either side of it -- it can
+       end the moment its last note is taken -- so the gap rule runs over the
+       timed notes as if it were not there. */
+    const timed = notes.filter((note) => !note.frozen);
+    for (let i = 1; i < timed.length; i++) {
+      const previous = timed[i - 1];
+      const gap = timed[i].t - (previous.t + (previous.duration ?? 0));
+      if (gap < MIN_GAP) {
+        fail(
+          `${gap.toFixed(2)}s between notes at t=${timed[i].t.toFixed(2)}s ` +
+            `— below the ${MIN_GAP}s a pinch cycle needs`,
+        );
+      }
     }
 
-    for (const [hand, handNotes] of byHand) {
-      for (let i = 1; i < handNotes.length; i++) {
-        const previous = handNotes[i - 1];
-        const gap = handNotes[i].t - (previous.t + (previous.duration ?? 0));
-        if (gap < MIN_GAP) {
-          fail(
-            `${gap.toFixed(2)}s between notes at t=${handNotes[i].t.toFixed(2)}s ` +
-              `(hand: ${hand}) — below the ${MIN_GAP}s a pinch cycle needs`,
-          );
-        }
+    const freezes = map.freezes ?? [];
+    for (const freeze of freezes) {
+      const frozen = notes.filter((note) => note.frozen && Math.abs(note.t - freeze.t) < 1e-6);
+      if (frozen.length * FROZEN_PINCH > freeze.seconds - FREEZE_ENTRY) {
+        fail(
+          `${frozen.length} frozen notes in the ${freeze.seconds}s freeze at t=${freeze.t.toFixed(2)}s ` +
+            `— a hand needs ${FROZEN_PINCH}s for each, after ${FREEZE_ENTRY}s for it to settle`,
+        );
+      }
+      const after = timed.find((note) => note.t > freeze.t);
+      if (after && after.t - freeze.t < MIN_GAP) {
+        fail(`the note at t=${after.t.toFixed(2)}s follows the freeze at t=${freeze.t.toFixed(2)}s too closely`);
+      }
+    }
+    for (const note of notes.filter((n) => n.frozen)) {
+      if (!freezes.some((freeze) => Math.abs(freeze.t - note.t) < 1e-6)) {
+        fail(`the frozen note at t=${note.t.toFixed(2)}s belongs to no freeze`);
       }
     }
 

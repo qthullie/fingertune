@@ -94,44 +94,51 @@ export class Point2DFilter {
     this.fy = new OneEuroFilter(minCutoff, beta, dCutoff);
   }
 
-  /**
-   * Smooths a point and, optionally, projects it forward in time.
-   *
-   * `lookahead` is dead reckoning against a latency that cannot be removed. The
-   * webcam exposes a frame, transfers it, the model runs, and only then does the
-   * game learn where the hand *was* — 40 to 80 ms ago on a typical laptop. The
-   * cursor is therefore always behind the hand, and in a game judged to the
-   * millisecond that shows up as every hit landing late.
-   *
-   * Projecting along the filtered velocity puts the cursor where the hand is
-   * about to be instead of where it has been. Two guards make that safe:
-   *
-   * - The velocity comes from the filter's own smoothed derivative, so noise
-   *   does not become a lurch.
-   * - `maxStep` caps how far a single frame may extrapolate. Without it, the
-   *   instant a hand reverses direction the prediction overshoots hard in the
-   *   old direction, which is worse than the lag it was fixing.
-   *
-   * At `lookahead` 0 this is exactly the old behaviour.
-   */
-  filter(x: number, y: number, t: number, lookahead = 0, maxStep = Infinity): Vec2 {
-    const sx = this.fx.filter(x, t);
-    const sy = this.fy.filter(y, t);
-    if (lookahead <= 0) return { x: sx, y: sy };
+  /** Smooths a point. */
+  filter(x: number, y: number, t: number): Vec2 {
+    return { x: this.fx.filter(x, t), y: this.fy.filter(y, t) };
+  }
 
-    let dx = this.fx.speed * lookahead;
-    let dy = this.fy.speed * lookahead;
-    const step = Math.hypot(dx, dy);
-    if (step > maxStep) {
-      const scale = maxStep / step;
-      dx *= scale;
-      dy *= scale;
-    }
-    return { x: sx + dx, y: sy + dy };
+  /** The filtered velocity, in units per second (see OneEuroFilter.speed). */
+  get velocity(): Vec2 {
+    return { x: this.fx.speed, y: this.fy.speed };
   }
 
   reset(): void {
     this.fx.reset();
     this.fy.reset();
   }
+}
+
+/**
+ * Projects a smoothed point forward in time along its filtered velocity.
+ *
+ * This is dead reckoning against a latency that cannot be removed. The webcam
+ * exposes a frame, transfers it, the model runs, and only then does the game
+ * learn where the hand *was* — 40 to 80 ms ago on a typical laptop. The cursor
+ * is therefore always behind the hand, and in a game judged to the millisecond
+ * that shows up as every hit landing late.
+ *
+ * Projecting along the filtered velocity puts the cursor where the hand is
+ * about to be instead of where it has been. Two guards make that safe:
+ *
+ * - The velocity comes from the filter's own smoothed derivative, so noise
+ *   does not become a lurch.
+ * - `maxStep` caps how far the projection may reach. Without it, the instant a
+ *   hand reverses direction the prediction overshoots hard in the old
+ *   direction, which is worse than the lag it was fixing.
+ *
+ * At `seconds` 0 the point is returned unchanged.
+ */
+export function project(point: Vec2, velocity: Vec2, seconds: number, maxStep = Infinity): Vec2 {
+  if (seconds <= 0) return point;
+  let dx = velocity.x * seconds;
+  let dy = velocity.y * seconds;
+  const step = Math.hypot(dx, dy);
+  if (step > maxStep) {
+    const scale = maxStep / step;
+    dx *= scale;
+    dy *= scale;
+  }
+  return { x: point.x + dx, y: point.y + dy };
 }
