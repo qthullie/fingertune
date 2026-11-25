@@ -184,6 +184,17 @@ export interface Settings {
   /** Tracking debug overlay (key D in game). */
   DEBUG: boolean;
 
+  /* ---- Freezes (Beatmap.freezes) ----------------------------------------- */
+  /**
+   * Seconds a freeze holds before its notes appear: long enough for the
+   * music to fade and the player to see the world stop, short enough not to
+   * feel like waiting. The playability check counts from here
+   * (FREEZE_ENTRY in scripts/check-beatmaps.mjs).
+   */
+  FREEZE_ENTRY: number;
+  /** Seconds a freeze lingers after its last note is taken, before ending early. */
+  FREEZE_LINGER: number;
+
   /* ---- Pause ------------------------------------------------------------ */
   /**
    * Seconds without a tracked hand before the run pauses itself.
@@ -255,6 +266,8 @@ export const settings: Settings = {
   RESUME_REWIND: 1.2,
   MASTER_VOLUME: -6,
   DEBUG: false,
+  FREEZE_ENTRY: 0.8,
+  FREEZE_LINGER: 0.5,
 };
 
 /**

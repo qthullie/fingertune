@@ -56,6 +56,15 @@ export class AudioEngine {
   private master: Tone.Limiter | null = null;
   private musicBus: Tone.Gain | null = null;
   private effectsBus: Tone.Gain | null = null;
+  /**
+   * The sounds of a freeze, kept apart from the music so the music can fade
+   * out under them.
+   */
+  private sceneBus: Tone.Gain | null = null;
+  /** True while a freeze holds (see freeze()). */
+  private frozen = false;
+  /** Notes taken in the current freeze: each one climbs the scale. */
+  private frozenTaken = 0;
 
   /* Recorded sounds, loaded on demand, one deck per soundtrack that has some. */
   private readonly decks = new Map<Soundtrack, Promise<SampleDeck>>();
@@ -94,6 +103,8 @@ export class AudioEngine {
     const master = new Tone.Limiter(-1).toDestination();
     const music = new Tone.Gain().connect(master);
     const effects = new Tone.Gain().connect(master);
+    const scene = new Tone.Gain().connect(master);
+    this.sceneBus = scene;
     this.master = master;
     this.musicBus = music;
     this.effectsBus = effects;
@@ -259,6 +270,46 @@ export class AudioEngine {
     return this.band?.deck ?? null;
   }
 
+  /**
+   * Follows a freeze (see `Beatmap.freezes`). The music fades out and keeps
+   * its place; the track's freeze sounds play over the stillness; and when
+   * it lets go, the music comes back in exactly where it stopped, as after a
+   * pause.
+   *
+   * @param time game time the freeze holds at
+   */
+  freeze(edge: 'start' | 'end', time: number): void {
+    if (!this.initialized) return;
+    const now = Tone.now();
+    const music = this.musicBus?.gain;
+    const level = Tone.dbToGain(this.soundtrack.levels.music);
+    const sounds = this.soundtrack.freeze;
+    const scene = this.sceneBus ?? undefined;
+
+    if (edge === 'start') {
+      this.frozen = true;
+      this.frozenTaken = 0;
+      music?.cancelScheduledValues(now);
+      music?.setValueAtTime(music.value, now);
+      music?.linearRampToValueAtTime(0, now + 0.6);
+      Tone.Transport.pause(now + 0.6);
+      if (sounds && this.deck) {
+        this.deck.play(sounds.begin, now, { output: scene });
+        for (const voice of sounds.chord) {
+          this.deck.playNote(voice.name, voice.root, voice.note, now + 0.4, { output: scene, volume: -8 });
+        }
+      }
+      return;
+    }
+
+    this.frozen = false;
+    this.resumeMusic(time);
+    music?.cancelScheduledValues(now);
+    music?.setValueAtTime(0, now);
+    music?.linearRampToValueAtTime(level, now + 0.3);
+    if (sounds) this.deck?.play(sounds.end, now, { output: scene });
+  }
+
   /** Index of the section an eighth note falls in. */
   private sectionAt(eighth: number): number {
     let section = 0;
@@ -285,6 +336,9 @@ export class AudioEngine {
     void this.decks.get(plan.soundtrack)?.then((deck) => {
       if (this.band && this.soundtrack === plan.soundtrack) this.band.deck = deck;
     });
+    this.frozen = false;
+    // A run abandoned mid-freeze left the music faded out.
+    this.musicBus?.gain.cancelScheduledValues(Tone.now());
     this.musicBus?.gain.setValueAtTime(Tone.dbToGain(plan.soundtrack.levels.music), startAt);
     this.effectsBus?.gain.setValueAtTime(Tone.dbToGain(plan.soundtrack.levels.effects), startAt);
     /* Sections are laid on the music's own grid up front, rather than switched
@@ -347,7 +401,9 @@ export class AudioEngine {
   playHit(grade: Exclude<Grade, 'MISS'>, combo: number): void {
     if (!this.initialized) return;
     const scale = this.soundtrack.hitScale;
-    const note = scale[Math.min(combo, scale.length - 1)] ?? 'C5';
+    // In a freeze the scale climbs with each note taken, not with the combo.
+    const step = this.frozen ? this.frozenTaken++ : combo;
+    const note = scale[Math.min(step, scale.length - 1)] ?? 'C5';
     const recorded = this.soundtrack.hitInstrument;
     if (recorded && this.deck) {
       // On the game's own bus, like the synthesised pings it replaces.
@@ -397,6 +453,7 @@ export class AudioEngine {
       ...Object.values(this.band ?? {}),
       this.musicBus,
       this.effectsBus,
+      this.sceneBus,
       this.master,
     ]) {
       node?.dispose();

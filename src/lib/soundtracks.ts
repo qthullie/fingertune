@@ -64,6 +64,16 @@ export interface Soundtrack {
    * synthesised ping, and the note it is tuned to.
    */
   hitInstrument?: { name: string; root: string };
+  /**
+   * How a freeze (see `Beatmap.freezes`) sounds, from the track's samples: a
+   * sound as it begins, a chord held over the stillness, and a sound as it
+   * lets go. Without one, a freeze is only the music fading out and back.
+   */
+  freeze?: {
+    begin: string;
+    chord: ReadonlyArray<{ name: string; root: string; note: string }>;
+    end: string;
+  };
 }
 
 /** Shifts a note by whole octaves. */

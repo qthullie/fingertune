@@ -112,6 +112,7 @@ export function App(): JSX.Element {
         onSliderTick: () => audio.playSliderTick(),
         onPause: () => audio.pauseMusic(),
         onResume: (atTime) => audio.resumeMusic(atTime),
+        onFreeze: (edge, time) => audio.freeze(edge, time),
         onFinish: () => {
           const final = engine.getSnapshot();
           const result = submitScore(beatmapRef.current.id, {

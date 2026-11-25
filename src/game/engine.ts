@@ -10,7 +10,7 @@
 
 import { GRADE_STYLE, settings } from '../config/settings';
 import { EffectSystem } from './effects';
-import type { Beatmap, BeatmapPhase, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
+import type { Beatmap, BeatmapPhase, Freeze, GamePhase, GameSnapshot, Grade, Target, Vec2 } from './types';
 import { pixelDistance, radiusPx, toScreen, type Playfield } from '../render/view';
 import { pointAt, prepareSliderPath, sliderProgress } from './slider';
 
@@ -54,6 +54,16 @@ export class GameEngine {
   private lastBeat = -1;
 
   private t0 = 0;
+  /** The clock at the last advanceClock(), for ages measured in real time. */
+  private clockNow = 0;
+  /** The map's freezes, shifted like the notes. `fired` survives a rewind. */
+  private freezes: Array<Freeze & { fired: boolean }> = [];
+  /** The freeze in progress, and the clock when it began. */
+  private frozen: { freeze: Freeze; startClock: number } | null = null;
+  /** The last freeze to end, and the clock when it did. */
+  private lastFrozen: { freeze: Freeze; endClock: number } | null = null;
+  /** The clock when the run was paused, so a freeze can pick up where it was. */
+  private pausedAt = 0;
   private clock: () => number = () => performance.now() / 1000;
   private onHitSound: ((grade: Exclude<Grade, 'MISS'>, combo: number) => void) | null = null;
   private onMissSound: ((brokeCombo: boolean) => void) | null = null;
@@ -61,6 +71,7 @@ export class GameEngine {
   private onFinish: (() => void) | null = null;
   private onPause: (() => void) | null = null;
   private onResume: ((atTime: number) => void) | null = null;
+  private onFreeze: ((edge: 'start' | 'end', time: number) => void) | null = null;
 
   private listeners = new Set<Listener>();
   private snapshotCache: GameSnapshot = this.buildSnapshot();
@@ -120,6 +131,11 @@ export class GameEngine {
     onPause?: () => void;
     /** @param atTime the game time the run resumes at, rewind included. */
     onResume?: (atTime: number) => void;
+    /**
+     * A freeze (see `Beatmap.freezes`) begins or ends.
+     * @param time game time it holds at
+     */
+    onFreeze?: (edge: 'start' | 'end', time: number) => void;
   }): void {
     this.clock = options.clock;
     this.onHitSound = options.onHitSound;
@@ -128,6 +144,7 @@ export class GameEngine {
     this.onFinish = options.onFinish;
     this.onPause = options.onPause ?? null;
     this.onResume = options.onResume ?? null;
+    this.onFreeze = options.onFreeze ?? null;
   }
 
   /** Number of tracked hands, reported by the render loop. */
@@ -193,6 +210,7 @@ export class GameEngine {
         phaseIndex,
         ...(phase?.color !== undefined && { color: phase.color }),
         ...(note.newFigure && { newFigure: true }),
+        ...(note.frozen && { frozen: true }),
 
         points: path.points,
         cumulative: path.cumulative,
@@ -223,6 +241,12 @@ export class GameEngine {
     this.phaseEventId += 1;
     this.lastBeat = -1;
     this.t0 = startAt ?? this.clock();
+    this.clockNow = this.t0;
+    this.freezes = (beatmap.freezes ?? [])
+      .filter((freeze) => freeze.t >= skip)
+      .map((freeze) => ({ ...freeze, t: freeze.t - skip + settings.COUNTDOWN, fired: false }));
+    this.frozen = null;
+    this.lastFrozen = null;
     this.publish();
   }
 
@@ -316,12 +340,12 @@ export class GameEngine {
   /** Targets currently displayed / judgeable (approach window is per phase). */
   activeTargets(): Target[] {
     const now = this.time;
-    return this.targets.filter(
-      (target) =>
-        !target.dead &&
-        now >= target.t - target.approach &&
-        now <= target.t + target.duration + target.goodWindow,
-    );
+    return this.targets.filter((target) => {
+      if (target.dead) return false;
+      // A frozen note shows only inside its freeze, once the freeze has settled.
+      if (target.frozen) return this.collecting(target.t);
+      return now >= target.t - target.approach && now <= target.t + target.duration + target.goodWindow;
+    });
   }
 
   /**
@@ -330,7 +354,82 @@ export class GameEngine {
    * of error against a Perfect window that is only 60 ms wide.
    */
   advanceClock(): void {
-    if (this.phase === 'playing') this.time = this.clock() - this.t0;
+    if (this.phase !== 'playing') return;
+    const now = this.clock();
+    this.clockNow = now;
+
+    const frozen = this.frozen;
+    if (frozen) {
+      const elapsed = now - frozen.startClock;
+      const allTaken = elapsed >= settings.FREEZE_ENTRY + settings.FREEZE_LINGER && this.frozenLeft() === 0;
+      if (elapsed < frozen.freeze.seconds && !allTaken) {
+        this.time = frozen.freeze.t;
+        return;
+      }
+      this.endFreeze(now);
+    }
+
+    this.time = now - this.t0;
+    const next = this.freezes.find((freeze) => !freeze.fired && this.time >= freeze.t);
+    if (next) this.beginFreeze(next, now);
+  }
+
+  /**
+   * The freeze in progress, if any: how long it has run, in real seconds,
+   * how long it has left, and how many of its notes are still to take.
+   */
+  get freeze(): { freeze: Freeze; elapsed: number; left: number; notesLeft: number } | null {
+    if (!this.frozen) return null;
+    const elapsed = this.clockNow - this.frozen.startClock;
+    return {
+      freeze: this.frozen.freeze,
+      elapsed,
+      left: Math.max(0, this.frozen.freeze.seconds - elapsed),
+      notesLeft: this.frozenLeft(),
+    };
+  }
+
+  /** How long ago the last freeze ended, in real seconds. */
+  get sinceFreeze(): number {
+    return this.lastFrozen ? this.clockNow - this.lastFrozen.endClock : Infinity;
+  }
+
+  /** True while the freeze that began at `t` shows its notes. */
+  private collecting(t: number): boolean {
+    const frozen = this.frozen;
+    if (!frozen || Math.abs(frozen.freeze.t - t) > 1e-6) return false;
+    return this.clockNow - frozen.startClock >= settings.FREEZE_ENTRY;
+  }
+
+  private frozenLeft(): number {
+    const frozen = this.frozen;
+    if (!frozen) return 0;
+    return this.targets.filter((target) => target.frozen && !target.dead && Math.abs(target.t - frozen.freeze.t) < 1e-6)
+      .length;
+  }
+
+  /** Holds the run at `freeze.t`, from the instant it was crossed. */
+  private beginFreeze(freeze: Freeze & { fired: boolean }, now: number): void {
+    freeze.fired = true;
+    this.frozen = { freeze, startClock: now - (this.time - freeze.t) };
+    this.time = freeze.t;
+    this.snapshotDirty = true;
+    this.onFreeze?.('start', freeze.t);
+  }
+
+  /** Lets time run again from where it held. Notes not taken are misses. */
+  private endFreeze(now: number): void {
+    const frozen = this.frozen;
+    if (!frozen) return;
+    for (const target of this.targets) {
+      if (target.frozen && !target.dead && Math.abs(target.t - frozen.freeze.t) < 1e-6) this.judge(target, 'MISS');
+    }
+    this.frozen = null;
+    this.lastFrozen = { freeze: frozen.freeze, endClock: now };
+    this.t0 = now - frozen.freeze.t;
+    this.time = frozen.freeze.t;
+    this.snapshotDirty = true;
+    this.onFreeze?.('end', this.time);
   }
 
   /**
@@ -346,6 +445,7 @@ export class GameEngine {
   pause(auto = false): void {
     if (this.phase !== 'playing') return;
     this.phase = 'paused';
+    this.pausedAt = this.clock();
     this.autoPaused = auto;
     this.onPause?.();
     this.publish();
@@ -361,6 +461,16 @@ export class GameEngine {
    */
   resume(): void {
     if (this.phase !== 'paused') return;
+    // A freeze is already still: it picks up with the time it had left,
+    // rather than rewinding into the music it silenced.
+    if (this.frozen) {
+      this.frozen.startClock += this.clock() - this.pausedAt;
+      this.autoPaused = false;
+      this.handLostFor = 0;
+      this.phase = 'playing';
+      this.publish();
+      return;
+    }
     const at = Math.max(0, this.time - settings.RESUME_REWIND);
     this.time = at;
     this.t0 = this.clock() - at;

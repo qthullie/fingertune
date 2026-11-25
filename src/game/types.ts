@@ -35,6 +35,23 @@ export interface BeatmapNote {
    * star to the one before it (see render/sky.ts). Purely visual.
    */
   newFigure?: boolean;
+  /**
+   * A note that only exists inside a freeze (see `Freeze`): its `t` is the
+   * instant the freeze begins. It needs no timing -- any pinch on it while it
+   * shows is a PERFECT -- and is a miss if still there when the freeze ends.
+   */
+  frozen?: boolean;
+}
+
+/**
+ * A pause written into a map. At game time `t` the run holds still for up to
+ * `seconds` of real time: the music fades out, the rings stop, and the map's
+ * `frozen` notes for that instant appear, to be taken in any order before
+ * the time runs out. Taking the last one ends it early.
+ */
+export interface Freeze {
+  t: number;
+  seconds: number;
 }
 
 /**
@@ -93,6 +110,8 @@ export interface Beatmap {
   bpm: number;
   /** Which generated track plays under the map. Defaults to 'groove'. */
   soundtrack?: SoundtrackId;
+  /** Pauses written into the map, in beatmap seconds. Sorted by `t`. */
+  freezes?: Freeze[];
   /** Sorted by ascending `start`. The first one must start at 0. */
   phases: BeatmapPhase[];
   notes: BeatmapNote[];
