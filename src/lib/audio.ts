@@ -47,6 +47,15 @@ export class AudioEngine {
   private reverbSend: Tone.Reverb | null = null;
   private reverbBus: Tone.Gain | null = null;
 
+  /*
+   * Two buses into one limiter: the music, and the game's own sounds. Each
+   * soundtrack sets the balance between them (Soundtrack.levels), and the
+   * limiter is what lets a track push its music up without clipping.
+   */
+  private master: Tone.Limiter | null = null;
+  private musicBus: Tone.Gain | null = null;
+  private effectsBus: Tone.Gain | null = null;
+
   /* Instruments of the generated track. */
   private band: Band | null = null;
   private musicPart: Tone.Loop | null = null;
@@ -57,6 +66,8 @@ export class AudioEngine {
   /** The eighth note each section begins on, ascending. */
   private sectionStarts: number[] = [0];
   private initialized = false;
+  /** Audio time of the last miss sound (see playMiss). */
+  private lastMissAt = -1;
 
   get ready(): boolean {
     return this.initialized;
@@ -76,7 +87,14 @@ export class AudioEngine {
      * silence. So instruments go straight to the output and merely send a copy
      * into the reverb (wet = 1, dosed by the bus gain).
      */
-    const reverbBus = new Tone.Gain(0.25).toDestination();
+    const master = new Tone.Limiter(-1).toDestination();
+    const music = new Tone.Gain().connect(master);
+    const effects = new Tone.Gain().connect(master);
+    this.master = master;
+    this.musicBus = music;
+    this.effectsBus = effects;
+
+    const reverbBus = new Tone.Gain(0.25).connect(music);
     const reverb = new Tone.Reverb({ decay: 1.4, wet: 1 }).connect(reverbBus);
     // Wait for the IR: without this the first seconds of play have no tail.
     await reverb.generate();
@@ -89,7 +107,7 @@ export class AudioEngine {
     this.perfectSynth = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.12 },
-    }).toDestination();
+    }).connect(effects);
     this.perfectSynth.connect(reverb);
     this.perfectSynth.volume.value = -2;
 
@@ -97,7 +115,7 @@ export class AudioEngine {
     this.goodSynth = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'sine' },
       envelope: { attack: 0.002, decay: 0.11, sustain: 0, release: 0.08 },
-    }).toDestination();
+    }).connect(effects);
     this.goodSynth.connect(reverb);
     this.goodSynth.volume.value = -6;
 
@@ -105,13 +123,13 @@ export class AudioEngine {
     this.missSynth = new Tone.NoiseSynth({
       noise: { type: 'brown' },
       envelope: { attack: 0.002, decay: 0.22, sustain: 0 },
-    }).connect(new Tone.Filter({ frequency: 1200, type: 'lowpass' }).toDestination());
+    }).connect(new Tone.Filter({ frequency: 1200, type: 'lowpass' }).connect(effects));
     this.missSynth.volume.value = -12;
 
     this.missTone = new Tone.Synth({
       oscillator: { type: 'sawtooth' },
       envelope: { attack: 0.004, decay: 0.28, sustain: 0, release: 0.1 },
-    }).toDestination();
+    }).connect(effects);
     this.missTone.volume.value = -20;
 
     // Metronome / count-in.
@@ -119,7 +137,7 @@ export class AudioEngine {
       pitchDecay: 0.02,
       octaves: 4,
       envelope: { attack: 0.001, decay: 0.16, sustain: 0 },
-    }).toDestination();
+    }).connect(effects);
     this.metroSynth.volume.value = -14;
 
     this.metroLoop = new Tone.Loop((time) => {
@@ -127,7 +145,7 @@ export class AudioEngine {
     }, '4n');
 
     /* ---- Track ------------------------------------------------------------ */
-    this.buildMusic(reverb);
+    this.buildMusic(reverb, music);
 
     this.initialized = true;
   }
@@ -138,31 +156,31 @@ export class AudioEngine {
   }
 
   /** Builds the track's instruments and its sequencing loop. */
-  private buildMusic(reverb: Tone.Reverb): void {
+  private buildMusic(reverb: Tone.Reverb, music: Tone.Gain): void {
     const kick = new Tone.MembraneSynth({
       pitchDecay: 0.045,
       octaves: 6,
       envelope: { attack: 0.001, decay: 0.32, sustain: 0 },
-    }).toDestination();
+    }).connect(music);
     kick.volume.value = -6;
 
     const snare = new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.001, decay: 0.16, sustain: 0 },
-    }).toDestination();
+    }).connect(music);
     snare.volume.value = -18;
 
     const hat = new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.001, decay: 0.03, sustain: 0 },
-    }).connect(new Tone.Filter({ frequency: 7000, type: 'highpass' }).toDestination());
+    }).connect(new Tone.Filter({ frequency: 7000, type: 'highpass' }).connect(music));
     hat.volume.value = -26;
 
     // A long, bright wash: the downbeat of a drop.
     const crash = new Tone.NoiseSynth({
       noise: { type: 'white' },
       envelope: { attack: 0.001, decay: 1.6, sustain: 0 },
-    }).connect(new Tone.Filter({ frequency: 4000, type: 'highpass' }).toDestination());
+    }).connect(new Tone.Filter({ frequency: 4000, type: 'highpass' }).connect(music));
     crash.connect(reverb);
     crash.volume.value = -24;
 
@@ -171,14 +189,14 @@ export class AudioEngine {
       filter: { Q: 2, type: 'lowpass' },
       envelope: { attack: 0.005, decay: 0.18, sustain: 0.25, release: 0.2 },
       filterEnvelope: { attack: 0.005, decay: 0.12, sustain: 0.3, baseFrequency: 120, octaves: 2.5 },
-    }).toDestination();
+    }).connect(music);
     bass.volume.value = -14;
 
     // Same routing as the game sounds: direct output plus a reverb copy.
     const lead = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'triangle' },
       envelope: { attack: 0.005, decay: 0.2, sustain: 0.05, release: 0.2 },
-    }).toDestination();
+    }).connect(music);
     lead.connect(reverb);
     lead.volume.value = -18;
 
@@ -190,14 +208,14 @@ export class AudioEngine {
       envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.6 },
       modulation: { type: 'sine' },
       modulationEnvelope: { attack: 0.002, decay: 0.25, sustain: 0, release: 0.2 },
-    }).toDestination();
+    }).connect(music);
     bell.connect(reverb);
     bell.volume.value = -22;
 
     const pad = new Tone.PolySynth(Tone.Synth, {
       oscillator: { type: 'sine' },
       envelope: { attack: 0.6, decay: 0.4, sustain: 0.5, release: 1.2 },
-    }).toDestination();
+    }).connect(music);
     pad.connect(reverb);
     pad.volume.value = -22;
 
@@ -240,6 +258,8 @@ export class AudioEngine {
     const startAt = Tone.now() + delay;
     Tone.Transport.bpm.value = plan.bpm;
     this.soundtrack = plan.soundtrack;
+    this.musicBus?.gain.setValueAtTime(Tone.dbToGain(plan.soundtrack.levels.music), startAt);
+    this.effectsBus?.gain.setValueAtTime(Tone.dbToGain(plan.soundtrack.levels.effects), startAt);
     /* Sections are laid on the music's own grid up front, rather than switched
        when the render loop notices a new phase. Tone runs its callbacks ~100 ms
        ahead of the audio, so by the time a frame sees the phase change, the
@@ -315,6 +335,10 @@ export class AudioEngine {
   playMiss(brokeCombo: boolean): void {
     if (!this.initialized) return;
     const time = Tone.now();
+    // Several notes can be judged missed in one frame. One sound covers them,
+    // and Tone throws on a second start at the same instant.
+    if (time <= this.lastMissAt) return;
+    this.lastMissAt = time;
     this.missSynth?.triggerAttackRelease('8n', time);
     if (brokeCombo && this.missTone) {
       // Falling pitch, the "combo break" cue.
@@ -335,6 +359,9 @@ export class AudioEngine {
       this.reverbSend,
       this.reverbBus,
       ...Object.values(this.band ?? {}),
+      this.musicBus,
+      this.effectsBus,
+      this.master,
     ]) {
       node?.dispose();
     }

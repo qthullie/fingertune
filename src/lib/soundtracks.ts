@@ -48,6 +48,12 @@ export interface Soundtrack {
    * track's key: a hit is a note in the song, not a sound on top of it.
    */
   hitScale: readonly string[];
+  /**
+   * Gain of the music and of the game's own sounds (hits, misses, ticks), in
+   * dB. A scene map wants its music in front: a hit is punctuation, not the
+   * point.
+   */
+  levels: { music: number; effects: number };
 }
 
 /** Shifts a note by whole octaves. */
@@ -196,10 +202,12 @@ export const soundtracks: Record<SoundtrackId, Soundtrack> = {
   groove: {
     play: playGroove,
     hitScale: ['C5', 'D5', 'E5', 'G5', 'A5', 'C6', 'D6', 'E6'],
+    levels: { music: 0, effects: 0 },
   },
   // D major pentatonic: consonant over all four chords of the progression.
   constellation: {
     play: playConstellation,
     hitScale: ['D5', 'E5', 'F#5', 'A5', 'B5', 'D6', 'E6', 'F#6'],
+    levels: { music: 2, effects: -6 },
   },
 };
