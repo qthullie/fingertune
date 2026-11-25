@@ -362,14 +362,21 @@ each phase; misses are audible; the best score per beatmap is kept in
 
 *Demo* (120 BPM) teaches both note kinds at a pace that forgives everything.
 
-*Constellation* (100 BPM) is built the other way round from the rest: the song
-first, the chart second, like the last level of a rhythm game. Every note you
-hit becomes a star, linked to the one before it, and each figure takes its own
-corner of a night sky; a miss breaks the line, and the final phase lights up
-everything the run drew and ties it together. It has its own generated track
--- a build-up whose stars go to warp, two beats of silence, a drop -- and the
-sky, the rays and the shockwaves carry that intensity so the notes do not have
-to: they never come closer than 0.9 s apart.
+*Constellation* (100 BPM) is built the other way round from the demo: the song
+first, the chart second, like the last level of a rhythm game. Its notes are
+stars and its sliders shooting stars; every note you hit stays in the sky,
+linked to the one before it, and each figure takes its own corner of the
+night; a miss breaks the line, and the final phase lights up everything the
+run drew and ties it together. Twice the sky holds still (`freezes`): the
+music fades, and a figure's stars hang there to be gathered in any order
+before the time runs out, each one a step up the scale. Its music is a waltz
+for a small orchestra in an observatory -- celesta, harp, glockenspiel,
+pizzicato, cello, a soprano -- recorded one note at a time with ElevenLabs by
+[`scripts/make-sounds.mjs`](scripts/make-sounds.mjs), which also tunes each
+instrument to the nearest semitone so they play in tune together. The files
+are committed: neither a build nor a player needs a key. A build-up whose
+stars go to warp, two beats of silence and a drop carry the intensity, so the
+notes do not have to: they never come closer than 0.9 s apart.
 
 **A run can start at any phase.** Everything before it is dropped and the rest
 slides back to zero, so starting at the last phase is a real run at that
@@ -426,7 +433,8 @@ Charts are plain data — `{ x, y, t }` notes (plus `kind: 'slider'`, `path` and
 [`src/beatmaps/demo.ts`](src/beatmaps/demo.ts), which also has `path()`, `ring()`
 and `slider()` helpers. A map can name its music (`soundtrack`, see
 [`src/lib/soundtracks.ts`](src/lib/soundtracks.ts)), and a phase can play on a
-night sky instead of paper (`sky`, see [`src/render/sky.ts`](src/render/sky.ts)). Add yours and register it in
+night sky instead of paper (`sky`, see [`src/render/sky.ts`](src/render/sky.ts)) and
+hold still to have notes gathered (`freezes`, with `frozen` notes). Add yours and register it in
 [`src/beatmaps/index.ts`](src/beatmaps/index.ts); `npm run build` checks every
 chart before it ships ([`scripts/check-beatmaps.mjs`](scripts/check-beatmaps.mjs)).
 
@@ -558,6 +566,8 @@ src/
     handTracking.ts   MediaPipe, landmark smoothing, pinch state machine, hand slots
     oneEuro.ts        One-Euro filter
     audio.ts          Tone.js: reference clock, generated soundtrack, hit/miss sounds
+    sampleDeck.ts     recorded sounds: one-shots, repitched notes, samplers
+    sounds.ts         the generated sound sets, and the note each instrument is tuned to
     soundtracks.ts    what the generated band plays, one arrangement per track
     handWorker.ts     MediaPipe in a Web Worker, off the render thread
     calibration.ts    measuring a player's pinch range, and keeping it
@@ -586,6 +596,7 @@ supabase/
 scripts/
   copy-assets.mjs     MediaPipe wasm and the favicon into public/ (predev, prebuild)
   check-beatmaps.mjs  every chart validated before a build ships it
+  make-sounds.mjs     generates the scene maps' recorded sounds (ElevenLabs, ffmpeg)
   fetch-model.mjs     the hand model, for running fully offline
   make-og.mjs         draws public/og-card.png, the link-preview card
   fonts/              Inter, for the card only (OFL, see scripts/fonts)

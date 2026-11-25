@@ -417,6 +417,12 @@ export class AudioEngine {
     else this.goodSynth?.triggerAttackRelease(note, '32n');
   }
 
+  /** A slider's head was caught: the track's own sound for it, if it has one. */
+  playSliderStart(): void {
+    const sound = this.soundtrack.sliderStart;
+    if (this.initialized && sound) this.deck?.play(sound, Tone.now(), { output: this.effectsBus ?? undefined });
+  }
+
   /** Soft click while a slider is being followed. Quiet: it repeats a lot. */
   playSliderTick(): void {
     if (!this.initialized) return;

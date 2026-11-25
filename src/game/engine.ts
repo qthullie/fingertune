@@ -68,6 +68,7 @@ export class GameEngine {
   private onHitSound: ((grade: Exclude<Grade, 'MISS'>, combo: number) => void) | null = null;
   private onMissSound: ((brokeCombo: boolean) => void) | null = null;
   private onSliderTick: (() => void) | null = null;
+  private onSliderStart: (() => void) | null = null;
   private onFinish: (() => void) | null = null;
   private onPause: (() => void) | null = null;
   private onResume: ((atTime: number) => void) | null = null;
@@ -127,6 +128,8 @@ export class GameEngine {
     onHitSound: (grade: Exclude<Grade, 'MISS'>, combo: number) => void;
     onMissSound: (brokeCombo: boolean) => void;
     onSliderTick: () => void;
+    /** A slider's head was caught. */
+    onSliderStart?: () => void;
     onFinish: () => void;
     onPause?: () => void;
     /** @param atTime the game time the run resumes at, rewind included. */
@@ -141,6 +144,7 @@ export class GameEngine {
     this.onHitSound = options.onHitSound;
     this.onMissSound = options.onMissSound;
     this.onSliderTick = options.onSliderTick;
+    this.onSliderStart = options.onSliderStart ?? null;
     this.onFinish = options.onFinish;
     this.onPause = options.onPause ?? null;
     this.onResume = options.onResume ?? null;
@@ -730,6 +734,7 @@ export class GameEngine {
     // A grabbed slider stays on screen until its tail.
     target.dead = !startsSlider;
     if (startsSlider) {
+      this.onSliderStart?.();
       target.sliderState = 'holding';
       target.lastTickAt = this.time;
     } else if (target.kind === 'slider' && grade === 'MISS' && isSliderHead) {

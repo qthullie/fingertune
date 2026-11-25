@@ -29,7 +29,7 @@ import type { GameEngine } from '../game/engine';
 import { directionAt, pointAt, sliderProgress } from '../game/slider';
 import type { Target } from '../game/types';
 import { HAND_CONNECTIONS, LANDMARK_COUNT, type HandState } from '../lib/handTracking';
-import { NIGHT_INK, drawConstellations, drawGlow, drawSky, skyColor } from './sky';
+import { NIGHT_INK, drawConstellations, drawGlow, drawShootingStar, drawSky, skyColor, starShape } from './sky';
 import { radiusPx, toScreen, type Playfield, type View } from './view';
 
 export interface RenderInput {
@@ -190,6 +190,11 @@ function drawSlider(
   ink: Ink,
 ): void {
   if (target.points.length < 2) return;
+  if (ink.night) {
+    const accent = target.color ?? PALETTE.cyan;
+    drawShootingStar(ctx, playfield, target, now, accent, strokes().u);
+    return;
+  }
 
   const screen = target.points.map((point) => toScreen(playfield, point));
   const first = screen[0];
@@ -322,9 +327,27 @@ function drawTargets({ ctx, playfield, engine, ink }: Frame): void {
       continue;
     }
 
-    // On a sky the target gathers light as its ring closes, so the note to
-    // play next is the brightest thing on screen before it is the largest.
-    if (ink.night) {
+    /* On a sky a note is a star: the disc, its edge and its approach ring all
+       take the shape, and the ring turns as it closes, coming upright exactly
+       on the beat. Off the sky, circles. The hit area is a circle either way. */
+    const shape = (radius: number, turn = 0): Path2D => {
+      if (ink.night) return starShape(p, radius * 1.15, turn);
+      const circle = new Path2D();
+      circle.arc(p.x, p.y, radius, 0, Math.PI * 2);
+      return circle;
+    };
+
+    // A frozen note floats: a slow bob, and a glow that breathes.
+    if (target.frozen) {
+      const breath = Math.sin(performance.now() / 300 + target.id);
+      ctx.translate(0, breath * rTarget * 0.08);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      drawGlow(ctx, p, rTarget * (2.2 + 0.3 * breath), target.color ?? PALETTE.cyan, 0.7);
+      ctx.restore();
+    } else if (ink.night) {
+      // The note gathers light as its ring closes, so the next one to play is
+      // the brightest thing on screen before it is the largest.
       const k = Math.min(progress, 1);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -334,31 +357,25 @@ function drawTargets({ ctx, playfield, engine, ink }: Frame): void {
 
     // Disc: one flat colour. The logo's cyan is the target's colour, and the
     // target filling in is the whole cue the player is reading.
-    withAlpha(ctx, inPerfect ? 0.9 : 0.4, () => {
+    withAlpha(ctx, inPerfect || target.frozen ? 0.9 : 0.4, () => {
       ctx.fillStyle = target.color ?? PALETTE.cyan;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, rTarget, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fill(shape(rTarget));
     });
 
-    // Ring: ink at rest, magenta on the beat.
+    // Edge: ink at rest, magenta on the beat.
     ctx.lineWidth = inPerfect ? stroke.bold : stroke.thin;
     ctx.strokeStyle = inPerfect ? PALETTE.pink : ink.ink;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, rTarget, 0, Math.PI * 2);
-    ctx.stroke();
+    ctx.stroke(shape(rTarget));
 
-    // Approach ring: reaches the target radius exactly on the beat, in the
-    // phase's colour when it has one.
-    if (progress <= 1.05) {
+    // Approach ring: reaches the target's size exactly on the beat, in the
+    // phase's colour when it has one. A frozen note has no beat to meet.
+    if (progress <= 1.05 && !target.frozen) {
       const k = Math.min(progress, 1);
       const rApproach = rTarget * (settings.APPROACH_START - (settings.APPROACH_START - 1) * k);
       withAlpha(ctx, 0.35 + 0.65 * k, () => {
         ctx.lineWidth = target.color ? stroke.bold : stroke.thin;
         ctx.strokeStyle = target.color ?? PALETTE.pink;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, rApproach, 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.stroke(shape(rApproach, (1 - k) * 0.9));
       });
     }
     ctx.restore();

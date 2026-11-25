@@ -16,6 +16,7 @@
 import * as Tone from 'tone';
 import type { SoundtrackId } from '../game/types';
 import type { SampleDeck } from './sampleDeck';
+import { pitchesOf, soundSet } from './sounds';
 
 /** Every instrument a track can play. Built and routed by the AudioEngine. */
 export interface Band {
@@ -69,6 +70,8 @@ export interface Soundtrack {
    * sound as it begins, a chord held over the stillness, and a sound as it
    * lets go. Without one, a freeze is only the music fading out and back.
    */
+  /** A recorded sound to play when a slider's head is caught. */
+  sliderStart?: string;
   freeze?: {
     begin: string;
     chord: ReadonlyArray<{ name: string; root: string; note: string }>;
@@ -120,23 +123,35 @@ function playGroove(band: Band, { time, eighth, section }: Position): void {
 
 /* ------------------------------------------------------------- constellation -- */
 
+/** The note each of Constellation's instruments is tuned to. */
+const TUNED = pitchesOf('constellation');
+
 /**
- * Bm – G – D – A, one chord a bar: the progression under the whole track, so
- * that four very different sections still sound like one song.
+ * D – Bm – G – A, a chord a bar: the progression under the whole waltz, so
+ * that four very different sections still sound like one song. `bass` is the
+ * harp's low note, `chord` the pizzicato's two beats, `arp` the harp's run.
  */
 const CHORDS = [
-  { root: 'B1', pad: ['B3', 'D4', 'F#4'], arp: ['B4', 'D5', 'F#5', 'B5'] },
-  { root: 'G1', pad: ['G3', 'B3', 'D4'], arp: ['G4', 'B4', 'D5', 'G5'] },
-  { root: 'D2', pad: ['A3', 'D4', 'F#4'], arp: ['F#4', 'A4', 'D5', 'F#5'] },
-  { root: 'A1', pad: ['A3', 'C#4', 'E4'], arp: ['E4', 'A4', 'C#5', 'E5'] },
+  { bass: 'D3', chord: ['F#4', 'A4', 'D5'], arp: ['D5', 'F#5', 'A5', 'D6'] },
+  { bass: 'B2', chord: ['D4', 'F#4', 'B4'], arp: ['B4', 'D5', 'F#5', 'B5'] },
+  { bass: 'G2', chord: ['D4', 'G4', 'B4'], arp: ['G4', 'B4', 'D5', 'G5'] },
+  { bass: 'A2', chord: ['C#4', 'E4', 'A4'], arp: ['A4', 'C#5', 'E5', 'A5'] },
 ] as const;
 
-/** The drop's hook, an eighth per entry over the four chords. `null` rests. */
-const HOOK: ReadonlyArray<ReadonlyArray<string | null>> = [
-  ['F#5', null, 'D5', null, 'E5', 'F#5', null, 'A5'],
-  [null, 'G5', 'F#5', null, 'E5', null, 'D5', null],
-  ['F#5', null, 'D5', null, 'E5', 'F#5', null, 'A5'],
-  ['B5', null, 'A5', null, 'E5', null, 'C#5', null],
+/**
+ * The tune: a beat per entry, three to a bar, over two turns of the
+ * progression. It climbs to the top of the third bar and falls back, and the
+ * last bar holds, so the waltz breathes before it starts again.
+ */
+const TUNE: ReadonlyArray<string | null> = [
+  'A5', 'F#5', 'D5',
+  'B5', 'F#5', 'D5',
+  'G5', 'B5', 'D6',
+  'C#6', 'B5', 'A5',
+  'A5', 'F#5', 'A5',
+  'D6', 'C#6', 'B5',
+  'B5', 'G5', 'E5',
+  'A5', null, null,
 ];
 
 /** The sections, in the order the Constellation beatmap's phases run. */
@@ -144,78 +159,91 @@ const DUSK = 0;
 const RISE = 1;
 const SUPERNOVA = 2;
 
+/** Eighths in a bar of the waltz. */
+const BAR = 6;
 /** Eighths in the build-up, and the silence it ends on before the drop. */
 const RISE_LENGTH = 48;
 const RISE_GAP = 4;
+/** When the build-up's swell starts, so it peaks on that silence. */
+const SWELL_AT = 31;
 
 /**
- * Written for the Constellation beatmap, section by section.
+ * Written for the Constellation beatmap: a waltz for a small orchestra in an
+ * observatory among the stars, played from recorded instruments.
  *
- *   Dusk       pad and a sparse bell, 3-3-2 over the bar, a kick on the one.
- *   Rise       four on the floor, the bell climbing in straight eighths, and a
- *              snare roll that doubles its rate every two bars, then two beats
- *              of nothing. That gap is the drop: the ear hears it coming.
- *   Supernova  crash and sub on the downbeat, backbeat, offbeat hats, an
- *              octave-jumping bass and the hook on top.
- *   Afterglow  the pad and the bell, an octave up, with no drums at all.
+ *   Dusk       a harp on the one, a celesta turning the chord over like a
+ *              music box; the tune comes in on the fifth bar.
+ *   Rise       the pizzicato's two beats join, a cello holds the bass, and a
+ *              glockenspiel runs eighths in the last bars while timpani beat
+ *              the one and a swell builds -- then two beats of nothing.
+ *   Supernova  a harp glissando, timpani and triangle on the downbeat; the
+ *              tune on celesta and glockenspiel, a soprano holding the top of
+ *              each bar, harp runs under it all.
+ *   Afterglow  the harp alone, slowly, and the tune half as often.
  */
-function playConstellation(band: Band, { time, eighth, section, sinceSection }: Position): void {
-  const step = eighth % 8;
-  const chord = CHORDS[Math.floor(sinceSection / 8) % CHORDS.length] ?? CHORDS[0];
-  const sixteenth = Tone.Time('16n').toSeconds();
+function playConstellation(band: Band, { time, section, sinceSection }: Position): void {
+  const deck = band.deck;
+  if (!deck) return;
+  const step = sinceSection % BAR;
+  const bar = Math.floor(sinceSection / BAR);
+  const chord = CHORDS[bar % CHORDS.length] ?? CHORDS[0];
+  const tune = step % 2 === 0 ? (TUNE[Math.floor(sinceSection / 2) % TUNE.length] ?? null) : null;
+  const sampler = (name: string): Tone.Sampler | null => deck.instrument(name, TUNED[name] ?? 'C4');
+  const harp = sampler('harp');
+  const celesta = sampler('celesta');
+  const glock = sampler('glock');
+  const pizz = sampler('pizz');
+  const hold = (name: string, note: string, volume: number): void =>
+    deck.playNote(name, TUNED[name] ?? 'C4', note, time, { volume });
 
   if (section === DUSK) {
-    if (step === 0) band.pad.triggerAttackRelease([...chord.pad], '1m', time);
-    if (step === 0 || step === 3 || step === 6) {
-      band.bell.triggerAttackRelease(chord.arp[step === 0 ? 0 : step === 3 ? 2 : 3] ?? 'B4', '8n', time);
-    }
-    if (step === 0) band.kick.triggerAttackRelease('B0', '4n', time);
+    if (step === 0) harp?.triggerAttackRelease(chord.bass, '2n', time, 0.8);
+    if (step === 2 || step === 4) celesta?.triggerAttackRelease(chord.arp[step / 2] ?? 'D5', '4n', time, 0.5);
+    if (bar >= 4 && tune) celesta?.triggerAttackRelease(tune, '4n', time, 0.7);
+    if (step === 0 && bar % 2 === 0) hold('choir', chord.chord[2] ?? 'D5', -14);
     return;
   }
 
   if (section === RISE) {
     if (sinceSection >= RISE_LENGTH - RISE_GAP) return;
-    const bar = Math.floor(sinceSection / 8);
-
-    if (step === 0) band.pad.triggerAttackRelease([...chord.pad], '1m', time);
-    if (step % 2 === 0) band.kick.triggerAttackRelease('B0', '8n', time);
-    band.bell.triggerAttackRelease(octave(chord.arp[step % 4] ?? 'B4', bar >= 4 ? 1 : 0), '16n', time);
-    band.bass.triggerAttackRelease(chord.root, '16n', time);
-
-    // Quarters, then eighths, then sixteenths: the roll that makes a build-up.
-    const roll = bar < 2 ? (step % 2 === 0 ? 1 : 0) : bar < 4 ? 1 : 2;
-    const velocity = 0.25 + 0.75 * (sinceSection / RISE_LENGTH);
-    for (let i = 0; i < roll; i++) {
-      band.snare.triggerAttackRelease('32n', time + i * sixteenth, velocity);
+    if (sinceSection === SWELL_AT) deck.play('swell', time, { volume: -4 });
+    if (step === 0) {
+      harp?.triggerAttackRelease(chord.bass, '2n', time);
+      hold('strings', chord.bass, -8);
+      if (bar >= 4) deck.play('timpani', time, { volume: -6 });
     }
+    if (step === 2 || step === 4) pizz?.triggerAttackRelease([...chord.chord], '8n', time, 0.7);
+    if (tune) celesta?.triggerAttackRelease(tune, '4n', time, 0.8);
+    if (bar >= 5) glock?.triggerAttackRelease(chord.arp[sinceSection % 4] ?? 'D6', '16n', time, 0.4);
     return;
   }
 
   if (section === SUPERNOVA) {
     if (sinceSection === 0) {
-      band.crash.triggerAttackRelease('1n', time);
-      band.kick.triggerAttackRelease('B0', '2n', time);
-    } else if (step % 2 === 0) {
-      band.kick.triggerAttackRelease('B0', '8n', time);
+      deck.play('glissando', time, { volume: -2 });
+      deck.play('triangle', time, { volume: -6 });
     }
-    if (step === 0) band.pad.triggerAttackRelease([...chord.pad], '1m', time);
-    if (step === 2 || step === 6) band.snare.triggerAttackRelease('16n', time);
-    if (step % 2 === 1) band.hat.triggerAttackRelease('64n', time);
-    band.bass.triggerAttackRelease(octave(chord.root, step % 2), '16n', time);
-
-    const note = HOOK[Math.floor(sinceSection / 8) % HOOK.length]?.[step];
-    if (note) {
-      band.lead.triggerAttackRelease(note, '8n', time);
-      band.bell.triggerAttackRelease(octave(note, 1), '16n', time, 0.5);
+    if (step === 0) {
+      deck.play('timpani', time, { volume: -3 });
+      harp?.triggerAttackRelease(chord.bass, '2n', time);
+      hold('strings', chord.bass, -6);
+      hold('choir', chord.chord[2] ?? 'D5', -8);
+      if (bar % 2 === 0) deck.play('triangle', time, { volume: -12 });
+    }
+    if (step === 2 || step === 4) pizz?.triggerAttackRelease([...chord.chord], '8n', time, 0.8);
+    harp?.triggerAttackRelease(chord.arp[sinceSection % 4] ?? 'D5', '8n', time, 0.35);
+    if (tune) {
+      celesta?.triggerAttackRelease(tune, '4n', time, 0.9);
+      glock?.triggerAttackRelease(octave(tune, 1), '8n', time, 0.45);
     }
     return;
   }
 
   // Afterglow, and anything past it.
-  if (step === 0) band.pad.triggerAttackRelease([...chord.pad], '1m', time);
-  if (step === 0 || step === 3 || step === 6) {
-    band.bell.triggerAttackRelease(octave(chord.arp[step === 0 ? 3 : step === 3 ? 2 : 0] ?? 'B5', 1), '4n', time, 0.6);
-  }
+  if (step === 0) harp?.triggerAttackRelease(chord.bass, '1n', time, 0.7);
+  if (step % 2 === 0) harp?.triggerAttackRelease(chord.arp[(sinceSection / 2) % 4] ?? 'D5', '2n', time, 0.4);
+  if (tune && Math.floor(sinceSection / 2) % 2 === 0) celesta?.triggerAttackRelease(tune, '2n', time, 0.6);
+  if (step === 0 && bar % 2 === 0) hold('choir', chord.chord[1] ?? 'A4', -14);
 }
 
 export const soundtracks: Record<SoundtrackId, Soundtrack> = {
@@ -224,10 +252,23 @@ export const soundtracks: Record<SoundtrackId, Soundtrack> = {
     hitScale: ['C5', 'D5', 'E5', 'G5', 'A5', 'C6', 'D6', 'E6'],
     levels: { music: 0, effects: 0 },
   },
-  // D major pentatonic: consonant over all four chords of the progression.
+  /* D major pentatonic, high on the glockenspiel: every hit is a note the
+     waltz could have played, climbing with the combo. */
   constellation: {
     play: playConstellation,
-    hitScale: ['D5', 'E5', 'F#5', 'A5', 'B5', 'D6', 'E6', 'F#6'],
-    levels: { music: 2, effects: -6 },
+    samples: soundSet('constellation'),
+    hitInstrument: { name: 'glock', root: TUNED.glock ?? 'A6' },
+    hitScale: ['D6', 'E6', 'F#6', 'A6', 'B6', 'D7', 'E7', 'F#7'],
+    levels: { music: 3, effects: -4 },
+    sliderStart: 'shooting',
+    freeze: {
+      begin: 'freeze',
+      chord: [
+        { name: 'strings', root: TUNED.strings ?? 'C3', note: 'D3' },
+        { name: 'choir', root: TUNED.choir ?? 'C5', note: 'A4' },
+        { name: 'choir', root: TUNED.choir ?? 'C5', note: 'F#5' },
+      ],
+      end: 'release',
+    },
   },
 };

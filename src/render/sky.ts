@@ -12,11 +12,16 @@
  *   - a star field that drifts, or rushes outward under `Sky.warp`;
  *   - light: turning rays, a breath on every beat, a shockwave when a new sky
  *     comes in;
+ *   - a freeze holding everything still: the field stops, the sky dims, and
+ *     an arc round the screen runs down the time left;
  *   - constellations. Every note hit is a star, linked to the one before it
  *     in the same phase unless it starts a new figure (`newFigure`), and a
  *     miss breaks the line. Earlier phases' figures stay up, dimmed, and the
  *     last phase lights them all again, so a run ends on the whole sky the
  *     player drew.
+ *
+ * The notes themselves are stars here too (`starShape`), and a slider is a
+ * shooting star (`drawShootingStar`): drawn by the renderer, shaped here.
  *
  * Frame time is the constraint: no shadowBlur and no ctx.filter. A glow is a
  * sprite rendered once per colour and stamped with drawImage, and marks that
@@ -24,10 +29,11 @@
  * dozen calls a frame where one per star would be several hundred.
  */
 
+import { settings } from '../config/settings';
 import type { GameEngine } from '../game/engine';
 import { pointAt, sliderProgress } from '../game/slider';
 import type { Target, Vec2 } from '../game/types';
-import { toScreen, type Playfield } from './view';
+import { radiusPx, toScreen, type Playfield } from './view';
 
 /** Neutral colours for marks drawn over a sky. The paper is the sky itself. */
 export const NIGHT_INK = {
@@ -110,10 +116,66 @@ export function drawSky({ ctx, width, height, engine, u }: SkyFrame): void {
     ctx.fillRect(0, 0, width, height);
   }
 
-  if (sky.rays) drawRays(ctx, centre, reach, accent, now, onBeat);
-  drawStars(ctx, centre, reach, engine.skyWarp, now, onBeat, u);
+  const freeze = engine.freeze;
+  if (sky.rays && !freeze) drawRays(ctx, centre, reach, accent, now, onBeat);
+  drawStars(ctx, centre, reach, freeze ? 0 : engine.skyWarp, now, onBeat, u, freeze !== null);
   if (engine.previousPhase?.sky) drawShockwave(ctx, centre, reach, accent, engine.phaseElapsed, u);
+  // Letting go: a ring of light rushing out from the middle.
+  if (!freeze && engine.sinceFreeze < RELEASE) {
+    drawShockwave(ctx, centre, reach, NIGHT_INK.ink, engine.sinceFreeze * (SHOCKWAVE / RELEASE), u);
+  }
+  ctx.restore();
 
+  if (freeze) drawStillness(ctx, centre, width, height, accent, freeze, u);
+}
+
+/** Seconds the ring of a freeze letting go takes to cross the screen. */
+const RELEASE = 0.6;
+
+/**
+ * A freeze: the sky dims, a ripple goes out as it begins, like a bell
+ * struck, and an arc round the playfield runs down the time it has left.
+ */
+function drawStillness(
+  ctx: CanvasRenderingContext2D,
+  centre: Vec2,
+  width: number,
+  height: number,
+  accent: string,
+  freeze: NonNullable<GameEngine['freeze']>,
+  u: number,
+): void {
+  const settle = Math.min(1, freeze.elapsed / settings.FREEZE_ENTRY);
+  const radius = Math.min(width, height) * 0.47;
+  ctx.save();
+  ctx.fillStyle = `rgba(4, 3, 16, ${0.35 * settle})`;
+  ctx.fillRect(0, 0, width, height);
+
+  if (freeze.elapsed < settings.FREEZE_ENTRY * 1.5) {
+    const k = freeze.elapsed / (settings.FREEZE_ENTRY * 1.5);
+    ctx.globalAlpha = 1 - k;
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = u * (1 + 3 * (1 - k));
+    ctx.beginPath();
+    ctx.arc(centre.x, centre.y, radius * 1.4 * easeOut(k), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  const left = freeze.left / freeze.freeze.seconds;
+  ctx.globalAlpha = 0.5 * settle;
+  ctx.strokeStyle = NIGHT_INK.rule;
+  ctx.lineWidth = u * 2;
+  ctx.beginPath();
+  ctx.arc(centre.x, centre.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  // The time left, from the top, clockwise; in the last second it turns red.
+  ctx.globalAlpha = settle;
+  ctx.strokeStyle = freeze.left < 1 ? '#ff6b6b' : accent;
+  ctx.lineWidth = u * 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(centre.x, centre.y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -170,10 +232,11 @@ function drawStars(
   now: number,
   onBeat: number,
   u: number,
+  still: boolean,
 ): void {
   const dt = lastFrame > 0 ? Math.min(now - lastFrame, 0.05) : 0;
   lastFrame = now;
-  travel = (travel + (DRIFT + warp * WARP_SPEED) * dt) % 1;
+  if (!still) travel = (travel + (DRIFT + warp * WARP_SPEED) * dt) % 1;
 
   // One path of dots per brightness, one of streaks per brightness and width.
   const dots = Array.from({ length: STAR_LEVELS }, () => new Path2D());
@@ -394,6 +457,113 @@ function addGlint(path: Path2D, at: Vec2, arm: number): void {
     path.lineTo(sideX, sideY);
   }
   path.closePath();
+}
+
+/* ------------------------------------------------------------ star notes ---- */
+
+/**
+ * A five-pointed star of outer radius `radius` around `at`, one point up when
+ * `turn` is 0. Its inner radius is two fifths of the outer: a classic star,
+ * whose overall size still reads at a glance as "how big", which is what an
+ * approach ring has to say.
+ */
+export function starShape(at: Vec2, radius: number, turn = 0): Path2D {
+  const path = new Path2D();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 === 0 ? radius : radius * 0.42;
+    const angle = turn - Math.PI / 2 + (i * Math.PI) / 5;
+    const x = at.x + Math.cos(angle) * r;
+    const y = at.y + Math.sin(angle) * r;
+    if (i === 0) path.moveTo(x, y);
+    else path.lineTo(x, y);
+  }
+  path.closePath();
+  return path;
+}
+
+/** How much of the path behind the ball a shooting star's tail covers. */
+const TAIL = 0.28;
+const TAIL_SEGMENTS = 14;
+
+/**
+ * A slider on a night sky: a shooting star. The path ahead is a faint dotted
+ * line ending on a hollow star, the ball is a bright star, and behind it a
+ * tail tapers off along the way it came -- which is also how the player
+ * reads which way it is going once it moves.
+ */
+export function drawShootingStar(
+  ctx: CanvasRenderingContext2D,
+  playfield: Playfield,
+  target: Target,
+  now: number,
+  accent: string,
+  u: number,
+): void {
+  const r = radiusPx(playfield, target.radius);
+  const screen = target.points.map((point) => toScreen(playfield, point));
+  const first = screen[0];
+  const tail = screen[screen.length - 1];
+  if (!first || !tail) return;
+  const holding = target.sliderState === 'holding';
+  const dropped = target.sliderState === 'dropped';
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // The way ahead.
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = u * 1.5;
+  ctx.setLineDash([u * 1.5, u * 5]);
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  for (const point of screen.slice(1)) ctx.lineTo(point.x, point.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = 0.8;
+  ctx.lineWidth = u;
+  ctx.stroke(starShape(tail, r * 0.6));
+
+  if (now >= target.t) {
+    const progress = sliderProgress(target, now);
+    const ball = toScreen(playfield, pointAt(target, progress));
+
+    // The tail: segments growing thinner and fainter away from the ball.
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < TAIL_SEGMENTS; i++) {
+      const a = Math.max(0, progress - (TAIL * i) / TAIL_SEGMENTS);
+      const b = Math.max(0, progress - (TAIL * (i + 1)) / TAIL_SEGMENTS);
+      if (a <= b) break;
+      const from = toScreen(playfield, pointAt(target, a));
+      const to = toScreen(playfield, pointAt(target, b));
+      const fade = 1 - i / TAIL_SEGMENTS;
+      ctx.globalAlpha = 0.85 * fade;
+      ctx.strokeStyle = i < 2 ? NIGHT_INK.ink : accent;
+      ctx.lineWidth = r * 0.9 * fade;
+      ctx.beginPath();
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    }
+    drawGlow(ctx, ball, r * 2.2, dropped ? '#ff6b6b' : accent, holding ? 0.9 : 0.5);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // How much slack there is while holding.
+    if (holding || dropped) {
+      ctx.globalAlpha = 0.6;
+      ctx.strokeStyle = dropped ? '#ff6b6b' : accent;
+      ctx.lineWidth = u * 1.5;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, r * settings.SLIDER_FOLLOW_SCALE, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = holding ? '#ffffff' : NIGHT_INK.inkSoft;
+    ctx.fill(starShape(ball, r * 0.7, now * 4));
+  }
+  ctx.restore();
 }
 
 /* -------------------------------------------------------------------- glows ---- */

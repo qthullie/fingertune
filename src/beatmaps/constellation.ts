@@ -9,7 +9,8 @@
  * chart follows that shape instead of a difficulty curve.
  *
  *   1. Dusk       3 beats  1.8 s   The Dipper, top left: six stars and a
- *                                  slider that closes its bowl.
+ *                                  shooting star that closes its bowl. Then
+ *                                  the sky holds still: gather Cassiopeia.
  *   2. Rise       2 beats  1.2 s   The build-up. Stars rush past faster and
  *                                  faster while a spiral winds in on the
  *                                  right, then two beats of silence.
@@ -17,7 +18,14 @@
  *                                  over it, a small star, a comet, a ring,
  *                                  and the core.
  *   4. Afterglow  4 beats  2.4 s   A crescent moon to drag, then one star on
- *                                  each figure, linked across the whole sky.
+ *                                  each figure, linked across the whole sky;
+ *                                  the sky holds still once more for a crown
+ *                                  over the core, and the core is last.
+ *
+ * Twice, the sky holds still (`freezes`): the music fades, and the stars of
+ * a figure hang there to be gathered in any order before the time runs out.
+ * Their lines only draw in once time moves again -- the figure is revealed
+ * as the music comes back.
  *
  * THE PACE IS SET BY THE HAND, NOT BY THE SONG. A pinch has to close, be seen
  * closing by a ~30 fps webcam, reopen past PINCH_OFF_RATIO, and travel (see
@@ -38,7 +46,7 @@
  * track, and the music switches section on the very beat a phase begins.
  */
 
-import type { Beatmap, BeatmapNote, BeatmapPhase } from '../game/types';
+import type { Beatmap, BeatmapNote, BeatmapPhase, Freeze } from '../game/types';
 
 const BPM = 100;
 const BEAT = 60 / BPM; // 0.6 s
@@ -169,6 +177,43 @@ const dusk: BeatmapNote[] = [
 ];
 
 /* -------------------------------------------------------------------------- */
+/* The pauses: the sky holds still, and a figure's stars wait to be gathered. */
+/* -------------------------------------------------------------------------- */
+
+/** Stars that only exist inside the freeze at `beat`, linked into one figure. */
+function frozenFigure(beat: number, points: ReadonlyArray<Point>): BeatmapNote[] {
+  return figure(points.map(([x, y]) => ({ x, y, t: at(beat), frozen: true })));
+}
+
+const CASSIOPEIA_AT = 21.5;
+const CROWN_AT = 120.5;
+
+const freezes: Freeze[] = [
+  { t: at(CASSIOPEIA_AT), seconds: 5.5 },
+  { t: at(CROWN_AT), seconds: 6.5 },
+];
+
+/** Cassiopeia's W, across the top, after the Dipper. */
+const cassiopeia = frozenFigure(CASSIOPEIA_AT, [
+  [0.3, 0.34],
+  [0.4, 0.5],
+  [0.5, 0.38],
+  [0.6, 0.5],
+  [0.7, 0.34],
+]);
+
+/** A crown over the core, the last figure before the last star. */
+const crown = frozenFigure(CROWN_AT, [
+  [0.27, 0.5],
+  [0.33, 0.3],
+  [0.41, 0.44],
+  [0.5, 0.28],
+  [0.59, 0.44],
+  [0.67, 0.3],
+  [0.73, 0.5],
+]);
+
+/* -------------------------------------------------------------------------- */
 /* Rise: a spiral winding in on the right while the sky goes to warp, then a  */
 /* shooting star along the bottom and a single star where the drop will hit.  */
 /* -------------------------------------------------------------------------- */
@@ -241,7 +286,7 @@ const phases: BeatmapPhase[] = [
   {
     id: 'dusk',
     name: 'Dusk',
-    hint: 'Every note you hit becomes a star. Link them up.',
+    hint: 'Every note you hit becomes a star. When the sky holds still, gather them all.',
     start: 0,
     approachTime: 2.0,
     hitWindowScale: 2.6,
@@ -291,5 +336,6 @@ export const constellationBeatmap: Beatmap = {
   bpm: BPM,
   soundtrack: 'constellation',
   phases,
-  notes: [...dusk, ...rise, ...supernova, ...afterglow].sort((a, b) => a.t - b.t),
+  freezes,
+  notes: [...dusk, ...cassiopeia, ...rise, ...supernova, ...afterglow, ...crown].sort((a, b) => a.t - b.t),
 };

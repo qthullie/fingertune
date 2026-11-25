@@ -110,6 +110,7 @@ export function App(): JSX.Element {
         onHitSound: (grade, combo) => audio.playHit(grade, combo),
         onMissSound: (brokeCombo) => audio.playMiss(brokeCombo),
         onSliderTick: () => audio.playSliderTick(),
+        onSliderStart: () => audio.playSliderStart(),
         onPause: () => audio.pauseMusic(),
         onResume: (atTime) => audio.resumeMusic(atTime),
         onFreeze: (edge, time) => audio.freeze(edge, time),
@@ -221,6 +222,14 @@ export function App(): JSX.Element {
     settings.SHOW_VIDEO = !hideVideo;
     saveHideVideo(hideVideo);
   }, [hideVideo]);
+
+  /* A map on a night sky turns the menu into that sky as soon as it is picked. */
+  useEffect(() => {
+    document.body.classList.toggle('starry', beatmap.phases.some((phase) => phase.sky));
+    return () => {
+      document.body.classList.remove('starry');
+    };
+  }, [beatmap]);
 
   /* Stop the music when the run ends. */
   useEffect(() => {
